@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { fetchCourseDetailThunk, fetchCourseResourcesThunk } from '../store/coursesSlice';
+import { fetchCourseDetailThunk, fetchCourseResourcesThunk, clearCourseResources } from '../store/coursesSlice';
 import { fetchMyEnrollmentsThunk, requestEnrollmentThunk } from '../store/enrollmentSlice';
 import { fetchResourceAccess } from '../api/resources';
 import ResourceViewer from '../components/course/ResourceViewer';
@@ -17,7 +17,9 @@ import {
   AlertOctagon,
   Eye,
   BookOpen,
-  Calendar
+  Calendar,
+  Presentation,
+  Loader
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -25,19 +27,32 @@ export default function CourseDetail() {
   const { id } = useParams();
   const dispatch = useDispatch();
   
-  const { selectedCourse: course, resources, isLoading: isCourseLoading } = useSelector((state) => state.courses);
+  const { 
+    selectedCourse: course, 
+    resources, 
+    isLoading: isCourseLoading,
+    isResourcesLoading 
+  } = useSelector((state) => state.courses);
   const { myEnrollments } = useSelector((state) => state.enrollment);
 
   const [activeViewerResource, setActiveViewerResource] = useState(null);
   const [signedUrl, setSignedUrl] = useState(null);
   const [isAccessLoading, setIsAccessLoading] = useState(false);
   const [selectedResourceType, setSelectedResourceType] = useState('all');
+  const [isResourceAccessLoading, setIsResourceAccessLoading] = useState(false);
 
   useEffect(() => {
     if (id) {
+      // Clear resources when course changes
+      dispatch(clearCourseResources());
       dispatch(fetchCourseDetailThunk(id));
       dispatch(fetchMyEnrollmentsThunk());
     }
+    
+    // Cleanup function to clear resources when unmounting or changing courses
+    return () => {
+      dispatch(clearCourseResources());
+    };
   }, [id, dispatch]);
 
   const courseId = course?._id || course?.id;
@@ -68,6 +83,7 @@ export default function CourseDetail() {
 
   const handleViewResource = async (res) => {
     setIsAccessLoading(true);
+    setIsResourceAccessLoading(true);
     try {
       const resId = res._id || res.id;
       const data = await fetchResourceAccess(resId);
@@ -77,13 +93,49 @@ export default function CourseDetail() {
       toast.error(err.message || 'Unable to access resource.');
     } finally {
       setIsAccessLoading(false);
+      setIsResourceAccessLoading(false);
+    }
+  };
+
+  const getResourceIcon = (type) => {
+    const resourceType = type?.toLowerCase();
+    switch (resourceType) {
+      case 'pdf':
+        return FileText;
+      case 'video':
+        return Video;
+      case 'image':
+        return ImageIcon;
+      case 'ppt':
+      case 'pptx':
+      case 'presentation':
+        return Presentation;
+      default:
+        return File;
+    }
+  };
+
+  const getResourceTypeLabel = (type) => {
+    const resourceType = type?.toLowerCase();
+    switch (resourceType) {
+      case 'pdf':
+        return 'PDF';
+      case 'video':
+        return 'Video';
+      case 'image':
+        return 'Image';
+      case 'ppt':
+      case 'pptx':
+        return 'Presentation';
+      default:
+        return type || 'File';
     }
   };
 
   if (isCourseLoading) {
     return (
       <div className="py-12 text-center">
-        <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+        <Loader className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
         <p className="text-sm text-slate-500">Loading course details...</p>
       </div>
     );
@@ -102,7 +154,14 @@ export default function CourseDetail() {
 
   const filteredResources = resources.filter(r => {
     if (selectedResourceType === 'all') return true;
-    return r.type === selectedResourceType;
+    const resourceType = r.type?.toLowerCase();
+    
+    // Handle PPT and PPTX as the same type
+    if (selectedResourceType === 'ppt') {
+      return resourceType === 'ppt' || resourceType === 'pptx' || resourceType === 'presentation';
+    }
+    
+    return resourceType === selectedResourceType;
   });
 
   const initialLetter = course.courseName ? course.courseName.charAt(0).toUpperCase() : 'C';
@@ -148,6 +207,13 @@ export default function CourseDetail() {
             </div>
           )}
 
+          {enrollmentStatus === 'approved' && (
+            <div className="px-2.5 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-medium rounded-md border border-emerald-200 flex items-center gap-1">
+              <CheckCircle className="w-3 h-3" />
+              Enrolled
+            </div>
+          )}
+
           {enrollmentStatus === 'rejected' && (
             <div className="px-2.5 py-1.5 bg-red-50 text-red-700 text-xs font-medium rounded-md border border-red-200 flex items-center gap-1">
               <AlertOctagon className="w-3 h-3" />
@@ -176,17 +242,18 @@ export default function CourseDetail() {
 
           {/* Resource Filter */}
           {enrollmentStatus === 'approved' && (
-            <div className="flex gap-0.5 bg-slate-50 p-0.5 rounded-md border border-slate-200">
+            <div className="flex gap-0.5 bg-slate-50 p-0.5 rounded-md border border-slate-200 overflow-x-auto">
               {[
                 { value: 'all', label: 'All' },
                 { value: 'pdf', label: 'PDFs' },
                 { value: 'video', label: 'Videos' },
-                { value: 'image', label: 'Images' }
+                { value: 'image', label: 'Images' },
+                { value: 'ppt', label: 'Presentations' }
               ].map((filter) => (
                 <button
                   key={filter.value}
                   onClick={() => setSelectedResourceType(filter.value)}
-                  className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                  className={`px-2 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap ${
                     selectedResourceType === filter.value
                       ? 'bg-white text-blue-600 shadow-sm'
                       : 'text-slate-600 hover:text-slate-900'
@@ -201,7 +268,12 @@ export default function CourseDetail() {
 
         {/* Resources Grid */}
         {enrollmentStatus === 'approved' ? (
-          filteredResources.length === 0 ? (
+          isResourcesLoading ? (
+            <div className="text-center py-12">
+              <Loader className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
+              <p className="text-xs text-slate-500">Loading resources...</p>
+            </div>
+          ) : filteredResources.length === 0 ? (
             <div className="text-center py-6 text-xs text-slate-400">
               No resources available for this filter
             </div>
@@ -209,7 +281,8 @@ export default function CourseDetail() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {filteredResources.map((res) => {
                 const resId = res._id || res.id;
-                const Icon = res.type === 'pdf' ? FileText : res.type === 'video' ? Video : res.type === 'image' ? ImageIcon : File;
+                const Icon = getResourceIcon(res.type);
+                const resourceTypeLabel = getResourceTypeLabel(res.type);
                 
                 return (
                   <div
@@ -226,7 +299,7 @@ export default function CourseDetail() {
                         </h4>
                         <div className="flex items-center gap-1 mt-0.5">
                           <span className="text-[10px] text-slate-500 uppercase font-mono">
-                            {res.type || 'PDF'}
+                            {resourceTypeLabel}
                           </span>
                           <span className="text-[10px] text-slate-300">•</span>
                           <span className="text-[10px] text-slate-400">
@@ -241,7 +314,11 @@ export default function CourseDetail() {
                       disabled={isAccessLoading}
                       className="ml-2 px-2.5 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center gap-0.5 disabled:opacity-50 shrink-0"
                     >
-                      <Eye className="w-3 h-3" />
+                      {isAccessLoading && activeViewerResource?.id === resId ? (
+                        <Loader className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Eye className="w-3 h-3" />
+                      )}
                       View
                     </button>
                   </div>
@@ -280,7 +357,10 @@ export default function CourseDetail() {
       {/* Resource Viewer Modal */}
       <ResourceViewer
         isOpen={!!activeViewerResource}
-        onClose={() => { setActiveViewerResource(null); setSignedUrl(null); }}
+        onClose={() => { 
+          setActiveViewerResource(null); 
+          setSignedUrl(null);
+        }}
         resource={activeViewerResource ? { ...activeViewerResource, url: signedUrl } : null}
       />
     </div>

@@ -1,222 +1,206 @@
-import React, { useEffect } from 'react';
-import { 
-  X, 
-  FileText, 
-  Video, 
-  Image as ImageIcon, 
-  File, 
-  ShieldCheck
-} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, Download, ExternalLink, FileText, Presentation } from 'lucide-react';
 
 export default function ResourceViewer({ isOpen, onClose, resource }) {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (isOpen) {
+      setLoading(true);
+    }
+  }, [isOpen, resource?.url]);
+
   if (!isOpen || !resource) return null;
 
-  const isPdf = resource.type === 'pdf';
-  const isVideo = resource.type === 'video';
-  const isImage = resource.type === 'image';
-  const isNote = resource.type === 'note';
-
-  // Prevent right-click context menu
-  const handleContextMenu = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    return false;
+  const getFileExtension = (url) => {
+    if (!url) return '';
+    const cleanUrl = url.split('?')[0];
+    const parts = cleanUrl.split('.');
+    return parts[parts.length - 1].toLowerCase();
   };
 
-  // Prevent dragging
-  const handleDragStart = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    return false;
+  const getResourceType = () => {
+    const type = resource.type?.toLowerCase();
+    const url = resource.url || '';
+    const ext = getFileExtension(url);
+    
+    if (type === 'pdf' || ext === 'pdf') return 'pdf';
+    if (type === 'video' || ['mp4', 'webm', 'ogg'].includes(ext)) return 'video';
+    if (type === 'image' || ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext)) return 'image';
+    if (type === 'ppt' || type === 'pptx' || ['ppt', 'pptx', 'pps', 'ppsx'].includes(ext)) return 'ppt';
+    return 'other';
   };
 
-  // Prevent keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Prevent Ctrl+S, Ctrl+P, Ctrl+Shift+I, F12, Ctrl+U
-      if (
-        (e.ctrlKey && (e.key === 's' || e.key === 'S' || e.key === 'p' || e.key === 'P' || e.key === 'u' || e.key === 'U')) ||
-        (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) ||
-        e.key === 'F12'
-      ) {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-      }
-    };
+  const resourceType = getResourceType();
 
-    const handleContextMenuGlobal = (e) => {
-      // Check if right-click is within the modal
-      const modal = document.querySelector('[data-resource-viewer="true"]');
-      if (modal && modal.contains(e.target)) {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-      document.addEventListener('contextmenu', handleContextMenuGlobal);
+  const handleDownload = () => {
+    if (resource.url) {
+      window.open(resource.url, '_blank');
     }
+  };
 
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('contextmenu', handleContextMenuGlobal);
-    };
-  }, [isOpen]);
+  const handleOpenInNewTab = () => {
+    if (resource.url) {
+      window.open(resource.url, '_blank');
+    }
+  };
+
+  const renderContent = () => {
+    switch (resourceType) {
+      case 'pdf':
+        return (
+          <iframe
+            src={resource.url}
+            className="w-full h-full"
+            title={resource.title || 'PDF Viewer'}
+            onLoad={() => setLoading(false)}
+          />
+        );
+      
+      case 'video':
+        return (
+          <video
+            controls
+            className="w-full h-full"
+            src={resource.url}
+            onLoadedData={() => setLoading(false)}
+          >
+            Your browser does not support the video tag.
+          </video>
+        );
+      
+      case 'image':
+        return (
+          <div className="flex items-center justify-center h-full bg-slate-50">
+            <img
+              src={resource.url}
+              alt={resource.title || 'Resource Image'}
+              className="max-w-full max-h-full object-contain"
+              onLoad={() => setLoading(false)}
+            />
+          </div>
+        );
+      
+      case 'ppt':
+        return (
+          <div className="w-full h-full bg-slate-50 p-4">
+            <div className="bg-white rounded-lg shadow-lg p-8 max-w-4xl mx-auto h-full overflow-auto">
+              <div className="flex items-center justify-center h-full flex-col">
+                <div className="w-16 h-16 bg-orange-50 text-orange-600 rounded-lg flex items-center justify-center mb-4">
+                  <Presentation className="w-8 h-8" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                  PowerPoint Presentation
+                </h3>
+                <p className="text-sm text-slate-500 mb-4 text-center">
+                  {resource.title || 'This is a PowerPoint presentation file.'}
+                </p>
+                
+                {/* Google Docs Viewer for PPT */}
+                <iframe
+                  src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(resource.url)}`}
+                  className="w-full flex-1 min-h-[500px] border border-slate-200 rounded-lg"
+                  title="PowerPoint Viewer"
+                  onLoad={() => setLoading(false)}
+                />
+                
+                {/* Fallback options */}
+                <div className="mt-4 flex gap-3">
+                  <button
+                    onClick={handleOpenInNewTab}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Open in New Tab
+                  </button>
+                  <button
+                    onClick={handleDownload}
+                    className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      
+      default:
+        return (
+          <div className="flex flex-col items-center justify-center h-full bg-slate-50">
+            <FileText className="w-16 h-16 text-slate-400 mb-4" />
+            <p className="text-sm text-slate-600 mb-4">
+              This file type cannot be previewed directly.
+            </p>
+            <button
+              onClick={handleOpenInNewTab}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Open File
+            </button>
+          </div>
+        );
+    }
+  };
 
   return (
-    <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md animate-fadeIn p-2 sm:p-3 md:p-4 lg:p-5"
-      data-resource-viewer="true"
-      onContextMenu={handleContextMenu}
-    >
-      <div className="w-full h-full max-w-[95vw] max-h-[95vh] md:max-w-[90vw] md:max-h-[90vh] lg:max-w-[85vw] lg:max-h-[88vh] bg-white border border-slate-200 rounded-xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slideUp">
-        
-        {/* Modal Top Header */}
-        <div className="px-4 md:px-6 py-3 md:py-4 border-b-2 border-slate-200 flex items-center justify-between bg-slate-50/80 shrink-0">
-          <div className="flex items-center space-x-2 md:space-x-3 truncate min-w-0">
-            <span className="px-2 md:px-2.5 py-1 text-[10px] md:text-[11px] font-mono-code font-bold uppercase rounded-lg bg-blue-50 border border-blue-200 text-blue-600 shrink-0">
-              {resource.type || 'DOCUMENT'}
-            </span>
-            <h3 className="font-heading text-sm md:text-base font-bold text-slate-900 truncate">
-              {resource.title}
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      
+      {/* Modal */}
+      <div className="relative bg-white rounded-xl shadow-2xl w-[95%] max-w-5xl h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+          <div className="flex items-center gap-3">
+            <h3 className="text-sm font-semibold text-slate-900">
+              {resource.title || 'Resource Viewer'}
             </h3>
+            <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-slate-100 text-slate-600 uppercase">
+              {resourceType}
+            </span>
           </div>
-
-          <button
-            onClick={onClose}
-            className="w-8 h-8 md:w-9 md:h-9 rounded-lg md:rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-100 flex items-center justify-center transition-colors shrink-0 ml-2"
-            title="Close Preview"
-          >
-            <X className="w-4 h-4 md:w-5 md:h-5" />
-          </button>
-        </div>
-
-        {/* Modal Main Content Viewer Area */}
-        <div 
-          className="flex-1 overflow-y-auto bg-slate-100/60 flex flex-col items-center justify-center min-h-0 select-none"
-          onContextMenu={handleContextMenu}
-          onDragStart={handleDragStart}
-          style={{ userSelect: 'none', WebkitUserSelect: 'none', MsUserSelect: 'none' }}
-        >
           
-          {/* PDF Viewer - Full Width and Height */}
-          {isPdf && (
-            <div className="w-full h-full bg-slate-900 relative">
-              {resource.url ? (
-                <>
-                  <iframe 
-                    src={`${resource.url}#toolbar=0&navpanes=0&scrollbar=0&statusbar=0&messages=0&download=0`}
-                    title={resource.title}
-                    className="w-full h-full border-none"
-                    onContextMenu={handleContextMenu}
-                    style={{
-                      pointerEvents: 'auto',
-                      WebkitUserSelect: 'none',
-                      userSelect: 'none'
-                    }}
-                  />
-                  {/* Top gradient overlay to hide PDF viewer toolbar */}
-                  <div className="absolute top-0 inset-x-0 h-10 md:h-12 bg-slate-900 pointer-events-none"></div>
-                  
-                  {/* Bottom gradient overlay to hide PDF viewer bottom toolbar */}
-                  <div className="absolute bottom-0 inset-x-0 h-10 md:h-12 bg-slate-900 pointer-events-none"></div>
-                  
-                  {/* Watermark overlay */}
-                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                    <div className="transform rotate-[-30deg] text-slate-400/20 text-5xl md:text-7xl font-bold select-none">
-                      ACADEX
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-xs text-slate-400">
-                  Document URL unavailable
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Video Stream Viewer */}
-          {isVideo && (
-            <div className="w-full h-full flex items-center justify-center p-3 sm:p-4 md:p-6">
-              <div className="w-full max-w-6xl">
-                {resource.url ? (
-                  <div className="relative w-full">
-                    <video
-                      controls
-                      controlsList="nodownload noplaybackrate noremoteplayback"
-                      disablePictureInPicture
-                      src={resource.url}
-                      className="w-full h-auto max-h-[70vh] md:max-h-[75vh] rounded-lg md:rounded-2xl border border-slate-200 shadow-md bg-black"
-                      onContextMenu={handleContextMenu}
-                      onDragStart={handleDragStart}
-                    />
-                    {/* Watermark overlay */}
-                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                      <div className="transform rotate-[-30deg] text-white/20 text-5xl md:text-7xl font-bold select-none">
-                        ACADEX
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-12 text-xs text-slate-400">Video source URL missing</div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Image Viewer */}
-          {isImage && (
-            <div className="w-full h-full flex items-center justify-center p-3 sm:p-4 md:p-6">
-              <div className="w-full max-w-5xl">
-                {resource.url ? (
-                  <div className="relative w-full flex items-center justify-center">
-                    <img
-                      src={resource.url}
-                      alt={resource.title}
-                      className="w-full h-auto max-h-[70vh] md:max-h-[75vh] object-contain rounded-lg md:rounded-2xl border border-slate-200 shadow-md bg-white p-2 select-none"
-                      draggable="false"
-                      onContextMenu={handleContextMenu}
-                      onDragStart={handleDragStart}
-                      style={{ userSelect: 'none', WebkitUserSelect: 'none', MsUserSelect: 'none' }}
-                    />
-                    {/* Watermark overlay */}
-                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                      <div className="transform rotate-[-30deg] text-slate-400/20 text-4xl md:text-6xl font-bold select-none">
-                        ACADEX
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-12 text-xs text-slate-400">Image URL missing</div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Text Note / Annotation */}
-          {isNote && (
-            <div className="w-full max-w-4xl p-4 md:p-6 bg-white border border-slate-200 rounded-lg md:rounded-2xl shadow-sm font-sans text-xs md:text-sm text-slate-800 leading-relaxed select-none">
-              <div className="text-xs font-heading text-blue-600 font-bold mb-3 uppercase tracking-wider flex items-center space-x-1.5">
-                <File className="w-4 h-4" />
-                <span>Academic Notes & Annotations</span>
-              </div>
-              <div className="whitespace-pre-wrap p-3 md:p-4 bg-slate-50 rounded-lg md:rounded-xl border border-slate-100 text-slate-700">
-                {resource.content || resource.description || resource.title || 'No extra note content provided.'}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Modal Footer Bar */}
-        <div className="px-4 md:px-6 py-2.5 md:py-3 border-t-2 border-slate-200 bg-white flex items-center justify-center text-xs text-slate-500 shrink-0">
-          <div className="flex items-center space-x-1.5 text-emerald-600 font-semibold">
-            <ShieldCheck className="w-3.5 h-3.5 md:w-4 md:h-4" />
-            <span className="text-xs md:text-sm">Protected Academic Resource - Viewing Only</span>
+          <div className="flex items-center gap-2">
+            {resourceType !== 'video' && resourceType !== 'image' && (
+              <button
+                onClick={handleDownload}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600"
+                title="Download"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              onClick={handleOpenInNewTab}
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600"
+              title="Open in new tab"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
+        </div>
+        
+        {/* Content */}
+        <div className="flex-1 overflow-hidden relative">
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white">
+              <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          )}
+          {renderContent()}
         </div>
       </div>
     </div>

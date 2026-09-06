@@ -72,6 +72,7 @@ export const coursesSlice = createSlice({
     },
     clearCourseResources: (state) => {
       state.resources = [];
+      state.isResourcesLoading = false;
     },
   },
   extraReducers: (builder) => {
