@@ -5,6 +5,7 @@ import { fetchCourseDetailThunk, fetchCourseResourcesThunk, clearCourseResources
 import { fetchMyEnrollmentsThunk, requestEnrollmentThunk } from '../store/enrollmentSlice';
 import { fetchResourceAccess } from '../api/resources';
 import ResourceViewer from '../components/course/ResourceViewer';
+import Loader from '../components/Loader';
 import { 
   ArrowLeft, 
   FileText, 
@@ -18,8 +19,7 @@ import {
   Eye,
   BookOpen,
   Calendar,
-  Presentation,
-  Loader
+  Presentation
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -34,7 +34,7 @@ export default function CourseDetail() {
     isLoading: isCourseLoading,
     isResourcesLoading 
   } = useSelector((state) => state.courses);
-  const { myEnrollments } = useSelector((state) => state.enrollment);
+  const { myEnrollments, isLoading: isEnrollmentsLoading } = useSelector((state) => state.enrollment);
 
   const [activeViewerResource, setActiveViewerResource] = useState(null);
   const [signedUrl, setSignedUrl] = useState(null);
@@ -42,7 +42,6 @@ export default function CourseDetail() {
   const [selectedResourceType, setSelectedResourceType] = useState('all');
   const [localResources, setLocalResources] = useState([]);
   const [isLocalResourcesLoading, setIsLocalResourcesLoading] = useState(false);
-  const [isEnrollmentLoading, setIsEnrollmentLoading] = useState(true);
 
   useEffect(() => {
     // Clear resources immediately when course ID changes
@@ -52,15 +51,12 @@ export default function CourseDetail() {
       setSelectedResourceType('all');
       setActiveViewerResource(null);
       setSignedUrl(null);
-      setIsEnrollmentLoading(true);
       previousCourseId.current = id;
     }
 
     if (id) {
       dispatch(fetchCourseDetailThunk(id));
-      dispatch(fetchMyEnrollmentsThunk()).finally(() => {
-        setIsEnrollmentLoading(false);
-      });
+      dispatch(fetchMyEnrollmentsThunk());
     }
 
     // Cleanup function to clear resources when unmounting
@@ -80,7 +76,7 @@ export default function CourseDetail() {
   const enrollmentStatus = enrollmentReq ? enrollmentReq.status : 'not_requested';
 
   useEffect(() => {
-    if (courseId && enrollmentStatus === 'approved' && !isEnrollmentLoading) {
+    if (courseId && enrollmentStatus === 'approved' && !isEnrollmentsLoading) {
       setIsLocalResourcesLoading(true);
       dispatch(fetchCourseResourcesThunk(courseId)).finally(() => {
         setIsLocalResourcesLoading(false);
@@ -88,7 +84,7 @@ export default function CourseDetail() {
     } else if (enrollmentStatus !== 'approved') {
       setLocalResources([]);
     }
-  }, [courseId, enrollmentStatus, isEnrollmentLoading, dispatch]);
+  }, [courseId, enrollmentStatus, isEnrollmentsLoading, dispatch]);
 
   // Update local resources when Redux resources change
   useEffect(() => {
@@ -157,11 +153,11 @@ export default function CourseDetail() {
     }
   };
 
-  if (isCourseLoading || isEnrollmentLoading) {
+  // Show full page loader while loading
+  if (isCourseLoading || isEnrollmentsLoading) {
     return (
-      <div className="py-12 text-center">
-        <Loader className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
-        <p className="text-sm text-slate-500">Loading course details...</p>
+      <div className="flex items-center justify-center min-h-[600px]">
+        <Loader />
       </div>
     );
   }
@@ -292,9 +288,8 @@ export default function CourseDetail() {
         {/* Resources Grid */}
         {enrollmentStatus === 'approved' ? (
           isLocalResourcesLoading ? (
-            <div className="text-center py-12">
-              <Loader className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
-              <p className="text-xs text-slate-500">Loading resources...</p>
+            <div className="flex items-center justify-center min-h-[300px]">
+              <Loader />
             </div>
           ) : filteredResources.length === 0 ? (
             <div className="text-center py-6 text-xs text-slate-400">
@@ -338,7 +333,7 @@ export default function CourseDetail() {
                       className="ml-2 px-2.5 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center gap-0.5 disabled:opacity-50 shrink-0"
                     >
                       {isAccessLoading && activeViewerResource?._id === resId ? (
-                        <Loader className="w-3 h-3 animate-spin" />
+                        <Loader className="w-3 h-3" />
                       ) : (
                         <Eye className="w-3 h-3" />
                       )}
