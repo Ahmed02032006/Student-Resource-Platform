@@ -460,7 +460,10 @@ export default function AdminApprovalsPage() {
                 <tbody className="divide-y divide-slate-100">
                   {activeEnrollments.map((req) => (
                     <tr key={req._id || req.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="p-3.5 font-semibold text-slate-900">{req.userId?.name}</td>
+                      <td className="p-3.5 font-semibold text-slate-900">
+                        {req.userId?.name}<br />
+                        {req.userId?.email}
+                      </td>
                       <td className="p-3.5 font-bold text-blue-600 font-mono-code">{req.courseId?.courseCode}</td>
                       <td className="p-3.5">
                         <div className="flex items-center gap-1.5 text-slate-600">
