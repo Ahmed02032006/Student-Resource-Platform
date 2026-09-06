@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchCourseDetailThunk, fetchCourseResourcesThunk, clearCourseResources } from '../store/coursesSlice';
@@ -26,6 +26,7 @@ import toast from 'react-hot-toast';
 export default function CourseDetail() {
   const { id } = useParams();
   const dispatch = useDispatch();
+  const previousCourseId = useRef(null);
   
   const { 
     selectedCourse: course, 
@@ -39,19 +40,33 @@ export default function CourseDetail() {
   const [signedUrl, setSignedUrl] = useState(null);
   const [isAccessLoading, setIsAccessLoading] = useState(false);
   const [selectedResourceType, setSelectedResourceType] = useState('all');
-  const [isResourceAccessLoading, setIsResourceAccessLoading] = useState(false);
+  const [localResources, setLocalResources] = useState([]);
+  const [isLocalResourcesLoading, setIsLocalResourcesLoading] = useState(false);
+  const [isEnrollmentLoading, setIsEnrollmentLoading] = useState(true);
 
   useEffect(() => {
-    if (id) {
-      // Clear resources when course changes
+    // Clear resources immediately when course ID changes
+    if (previousCourseId.current !== id) {
       dispatch(clearCourseResources());
-      dispatch(fetchCourseDetailThunk(id));
-      dispatch(fetchMyEnrollmentsThunk());
+      setLocalResources([]);
+      setSelectedResourceType('all');
+      setActiveViewerResource(null);
+      setSignedUrl(null);
+      setIsEnrollmentLoading(true);
+      previousCourseId.current = id;
     }
-    
-    // Cleanup function to clear resources when unmounting or changing courses
+
+    if (id) {
+      dispatch(fetchCourseDetailThunk(id));
+      dispatch(fetchMyEnrollmentsThunk()).finally(() => {
+        setIsEnrollmentLoading(false);
+      });
+    }
+
+    // Cleanup function to clear resources when unmounting
     return () => {
       dispatch(clearCourseResources());
+      setLocalResources([]);
     };
   }, [id, dispatch]);
 
@@ -65,10 +80,22 @@ export default function CourseDetail() {
   const enrollmentStatus = enrollmentReq ? enrollmentReq.status : 'not_requested';
 
   useEffect(() => {
-    if (courseId && enrollmentStatus === 'approved') {
-      dispatch(fetchCourseResourcesThunk(courseId));
+    if (courseId && enrollmentStatus === 'approved' && !isEnrollmentLoading) {
+      setIsLocalResourcesLoading(true);
+      dispatch(fetchCourseResourcesThunk(courseId)).finally(() => {
+        setIsLocalResourcesLoading(false);
+      });
+    } else if (enrollmentStatus !== 'approved') {
+      setLocalResources([]);
     }
-  }, [courseId, enrollmentStatus, dispatch]);
+  }, [courseId, enrollmentStatus, isEnrollmentLoading, dispatch]);
+
+  // Update local resources when Redux resources change
+  useEffect(() => {
+    if (!isResourcesLoading) {
+      setLocalResources(resources);
+    }
+  }, [resources, isResourcesLoading]);
 
   const handleEnrollRequest = async () => {
     if (!courseId) return;
@@ -83,7 +110,6 @@ export default function CourseDetail() {
 
   const handleViewResource = async (res) => {
     setIsAccessLoading(true);
-    setIsResourceAccessLoading(true);
     try {
       const resId = res._id || res.id;
       const data = await fetchResourceAccess(resId);
@@ -93,7 +119,6 @@ export default function CourseDetail() {
       toast.error(err.message || 'Unable to access resource.');
     } finally {
       setIsAccessLoading(false);
-      setIsResourceAccessLoading(false);
     }
   };
 
@@ -132,7 +157,7 @@ export default function CourseDetail() {
     }
   };
 
-  if (isCourseLoading) {
+  if (isCourseLoading || isEnrollmentLoading) {
     return (
       <div className="py-12 text-center">
         <Loader className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
@@ -152,7 +177,7 @@ export default function CourseDetail() {
     );
   }
 
-  const filteredResources = resources.filter(r => {
+  const filteredResources = localResources.filter(r => {
     if (selectedResourceType === 'all') return true;
     const resourceType = r.type?.toLowerCase();
     
@@ -163,8 +188,6 @@ export default function CourseDetail() {
     
     return resourceType === selectedResourceType;
   });
-
-  const initialLetter = course.courseName ? course.courseName.charAt(0).toUpperCase() : 'C';
 
   return (
     <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
@@ -241,7 +264,7 @@ export default function CourseDetail() {
           </h2>
 
           {/* Resource Filter */}
-          {enrollmentStatus === 'approved' && (
+          {enrollmentStatus === 'approved' && !isLocalResourcesLoading && localResources.length > 0 && (
             <div className="flex gap-0.5 bg-slate-50 p-0.5 rounded-md border border-slate-200 overflow-x-auto">
               {[
                 { value: 'all', label: 'All' },
@@ -268,14 +291,14 @@ export default function CourseDetail() {
 
         {/* Resources Grid */}
         {enrollmentStatus === 'approved' ? (
-          isResourcesLoading ? (
+          isLocalResourcesLoading ? (
             <div className="text-center py-12">
               <Loader className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
               <p className="text-xs text-slate-500">Loading resources...</p>
             </div>
           ) : filteredResources.length === 0 ? (
             <div className="text-center py-6 text-xs text-slate-400">
-              No resources available for this filter
+              {localResources.length === 0 ? 'No resources available for this course' : 'No resources available for this filter'}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -314,7 +337,7 @@ export default function CourseDetail() {
                       disabled={isAccessLoading}
                       className="ml-2 px-2.5 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center gap-0.5 disabled:opacity-50 shrink-0"
                     >
-                      {isAccessLoading && activeViewerResource?.id === resId ? (
+                      {isAccessLoading && activeViewerResource?._id === resId ? (
                         <Loader className="w-3 h-3 animate-spin" />
                       ) : (
                         <Eye className="w-3 h-3" />
