@@ -22,31 +22,49 @@ import {
   File
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import Loader from '../../components/Loader';
 
 export default function AdminDashboardPage() {
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
-  const { list: courses } = useSelector((state) => state.courses);
-  const { logs: activityLogs } = useSelector((state) => state.activity);
+  const { list: courses, isLoading: isCoursesLoading } = useSelector((state) => state.courses);
+  const { logs: activityLogs, isLoading: isActivityLoading } = useSelector((state) => state.activity);
 
   const [pendingAccountsCount, setPendingAccountsCount] = useState(0);
   const [pendingEnrollmentsCount, setPendingEnrollmentsCount] = useState(0);
   const [approvedEnrollmentsCount, setApprovedEnrollmentsCount] = useState(0);
   const [totalUsersCount, setTotalUsersCount] = useState(0);
   const [recentEnrollments, setRecentEnrollments] = useState([]);
+  const [isStatsLoading, setIsStatsLoading] = useState(true);
 
   useEffect(() => {
     dispatch(fetchCoursesThunk());
     dispatch(fetchActivityLogThunk({ limit: 9 }));
     
-    adminApi.fetchAccounts('pending').then(res => setPendingAccountsCount(res.count || res.data?.length || 0)).catch(() => {});
-    adminApi.fetchAccounts('approved').then(res => setTotalUsersCount(res.count || res.data?.length || 0)).catch(() => {});
-    adminApi.fetchAdminEnrollments().then(res => {
-      const data = res.data || [];
-      setPendingEnrollmentsCount(data.filter(r => r.status === 'pending').length);
-      setApprovedEnrollmentsCount(data.filter(r => r.status === 'approved').length);
-      setRecentEnrollments(data.slice(0, 10)); // Fetch up to 10 enrollments
-    }).catch(() => {});
+    const fetchStats = async () => {
+      setIsStatsLoading(true);
+      try {
+        const [pendingRes, approvedRes, enrollRes] = await Promise.all([
+          adminApi.fetchAccounts('pending'),
+          adminApi.fetchAccounts('approved'),
+          adminApi.fetchAdminEnrollments()
+        ]);
+        
+        setPendingAccountsCount(pendingRes.count || pendingRes.data?.length || 0);
+        setTotalUsersCount(approvedRes.count || approvedRes.data?.length || 0);
+        
+        const data = enrollRes.data || [];
+        setPendingEnrollmentsCount(data.filter(r => r.status === 'pending').length);
+        setApprovedEnrollmentsCount(data.filter(r => r.status === 'approved').length);
+        setRecentEnrollments(data.slice(0, 10));
+      } catch (err) {
+        console.error('Failed to fetch stats:', err);
+      } finally {
+        setIsStatsLoading(false);
+      }
+    };
+
+    fetchStats();
   }, [dispatch]);
 
   const getActionBadge = (action) => {
@@ -84,6 +102,15 @@ export default function AdminDashboardPage() {
         return <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-100 text-slate-600 border border-slate-200">{status?.toUpperCase()}</span>;
     }
   };
+
+  // Show full page loader while loading
+  if (isCoursesLoading || isActivityLoading || isStatsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[600px]">
+        <Loader />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
