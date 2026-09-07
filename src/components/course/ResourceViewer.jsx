@@ -110,15 +110,6 @@ export default function ResourceViewer({ isOpen, onClose, resource }) {
           )}
           <div ref={viewerRef} className="max-w-4xl mx-auto" />
         </div>
-
-        {/* Footer */}
-        <div className="px-4 py-2 border-t border-slate-200 bg-slate-50">
-          <p className="text-[10px] text-slate-500 text-center flex items-center justify-center gap-1">
-            <span className="inline-block w-1 h-1 bg-slate-300 rounded-full"></span>
-            Viewing only - Download disabled
-            <span className="inline-block w-1 h-1 bg-slate-300 rounded-full"></span>
-          </p>
-        </div>
       </div>
     </div>
   );
