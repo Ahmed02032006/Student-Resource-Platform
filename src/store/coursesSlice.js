@@ -61,6 +61,7 @@ const initialState = {
   isLoading: false,
   isResourcesLoading: false,
   error: null,
+  resourcesFetchedForCourse: null, // Track which course resources belong to
 };
 
 export const coursesSlice = createSlice({
@@ -73,6 +74,14 @@ export const coursesSlice = createSlice({
     clearCourseResources: (state) => {
       state.resources = [];
       state.isResourcesLoading = false;
+      state.resourcesFetchedForCourse = null;
+    },
+    resetCourseState: (state) => {
+      state.selectedCourse = null;
+      state.resources = [];
+      state.isResourcesLoading = false;
+      state.resourcesFetchedForCourse = null;
+      state.error = null;
     },
   },
   extraReducers: (builder) => {
@@ -95,6 +104,7 @@ export const coursesSlice = createSlice({
     builder
       .addCase(fetchCourseDetailThunk.pending, (state) => {
         state.isLoading = true;
+        state.selectedCourse = null; // Clear selected course while loading
       })
       .addCase(fetchCourseDetailThunk.fulfilled, (state, action) => {
         state.isLoading = false;
@@ -107,20 +117,27 @@ export const coursesSlice = createSlice({
 
     // ── Fetch Course Resources ──
     builder
-      .addCase(fetchCourseResourcesThunk.pending, (state) => {
+      .addCase(fetchCourseResourcesThunk.pending, (state, action) => {
         state.isResourcesLoading = true;
+        // Clear old resources when starting new fetch
+        state.resources = [];
+        state.resourcesFetchedForCourse = action.meta.arg; // Store the course ID being fetched
       })
       .addCase(fetchCourseResourcesThunk.fulfilled, (state, action) => {
         state.isResourcesLoading = false;
-        state.resources = action.payload;
+        // Only set resources if they match the current course
+        if (state.resourcesFetchedForCourse === action.meta.arg) {
+          state.resources = action.payload;
+        }
       })
       .addCase(fetchCourseResourcesThunk.rejected, (state, action) => {
         state.isResourcesLoading = false;
         state.resources = [];
         state.error = action.payload;
+        state.resourcesFetchedForCourse = null;
       });
   },
 });
 
-export const { selectCourse, clearCourseResources } = coursesSlice.actions;
+export const { selectCourse, clearCourseResources, resetCourseState } = coursesSlice.actions;
 export default coursesSlice.reducer;

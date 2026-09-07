@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { fetchCourseDetailThunk, fetchCourseResourcesThunk, clearCourseResources } from '../store/coursesSlice';
+import { fetchCourseDetailThunk, fetchCourseResourcesThunk, clearCourseResources, resetCourseState } from '../store/coursesSlice';
 import { fetchMyEnrollmentsThunk, requestEnrollmentThunk } from '../store/enrollmentSlice';
 import { fetchResourceAccess } from '../api/resources';
 import ResourceViewer from '../components/course/ResourceViewer';
@@ -27,12 +27,14 @@ export default function CourseDetail() {
   const { id } = useParams();
   const dispatch = useDispatch();
   const previousCourseId = useRef(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   
   const { 
     selectedCourse: course, 
     resources, 
     isLoading: isCourseLoading,
-    isResourcesLoading 
+    isResourcesLoading,
+    resourcesFetchedForCourse
   } = useSelector((state) => state.courses);
   const { myEnrollments, isLoading: isEnrollmentsLoading } = useSelector((state) => state.enrollment);
 
@@ -41,28 +43,33 @@ export default function CourseDetail() {
   const [isAccessLoading, setIsAccessLoading] = useState(false);
   const [selectedResourceType, setSelectedResourceType] = useState('all');
   const [localResources, setLocalResources] = useState([]);
-  const [isLocalResourcesLoading, setIsLocalResourcesLoading] = useState(false);
 
+  // Reset state when course ID changes
   useEffect(() => {
-    // Clear resources immediately when course ID changes
-    if (previousCourseId.current !== id) {
-      dispatch(clearCourseResources());
+    const courseId = id;
+    const prevId = previousCourseId.current;
+
+    // If navigating to a different course, reset everything immediately
+    if (prevId !== courseId) {
+      // Clear all previous course data
+      dispatch(resetCourseState());
       setLocalResources([]);
       setSelectedResourceType('all');
       setActiveViewerResource(null);
       setSignedUrl(null);
-      previousCourseId.current = id;
+      previousCourseId.current = courseId;
+      setIsInitialLoad(true);
     }
 
-    if (id) {
-      dispatch(fetchCourseDetailThunk(id));
+    // Fetch new course data
+    if (courseId) {
+      dispatch(fetchCourseDetailThunk(courseId));
       dispatch(fetchMyEnrollmentsThunk());
     }
 
-    // Cleanup function to clear resources when unmounting
+    // Cleanup function
     return () => {
-      dispatch(clearCourseResources());
-      setLocalResources([]);
+      // Don't clear on unmount to allow smooth transitions, but we'll track the course
     };
   }, [id, dispatch]);
 
@@ -75,23 +82,34 @@ export default function CourseDetail() {
 
   const enrollmentStatus = enrollmentReq ? enrollmentReq.status : 'not_requested';
 
+  // Fetch resources when enrollment is approved
   useEffect(() => {
+    // Only fetch if we have a courseId and enrollment is approved
     if (courseId && enrollmentStatus === 'approved' && !isEnrollmentsLoading) {
-      setIsLocalResourcesLoading(true);
-      dispatch(fetchCourseResourcesThunk(courseId)).finally(() => {
-        setIsLocalResourcesLoading(false);
-      });
+      // Check if we've already fetched resources for this course
+      if (resourcesFetchedForCourse !== courseId) {
+        dispatch(clearCourseResources());
+        dispatch(fetchCourseResourcesThunk(courseId));
+      }
     } else if (enrollmentStatus !== 'approved') {
-      setLocalResources([]);
+      // Clear resources if not approved
+      if (resources.length > 0) {
+        dispatch(clearCourseResources());
+        setLocalResources([]);
+      }
     }
-  }, [courseId, enrollmentStatus, isEnrollmentsLoading, dispatch]);
+  }, [courseId, enrollmentStatus, isEnrollmentsLoading, dispatch, resourcesFetchedForCourse, resources.length]);
 
-  // Update local resources when Redux resources change
+  // Update local resources and loading state
   useEffect(() => {
-    if (!isResourcesLoading) {
+    if (!isResourcesLoading && resourcesFetchedForCourse === courseId) {
       setLocalResources(resources);
+      setIsInitialLoad(false);
+    } else if (isResourcesLoading) {
+      // Don't clear local resources immediately, but mark as loading
+      setIsInitialLoad(false);
     }
-  }, [resources, isResourcesLoading]);
+  }, [resources, isResourcesLoading, resourcesFetchedForCourse, courseId]);
 
   const handleEnrollRequest = async () => {
     if (!courseId) return;
@@ -154,7 +172,7 @@ export default function CourseDetail() {
   };
 
   // Show full page loader while loading
-  if (isCourseLoading || isEnrollmentsLoading) {
+  if (isCourseLoading || (isInitialLoad && isEnrollmentsLoading)) {
     return (
       <div className="flex items-center justify-center min-h-[600px]">
         <Loader />
@@ -184,6 +202,9 @@ export default function CourseDetail() {
     
     return resourceType === selectedResourceType;
   });
+
+  // Determine if resources should be shown
+  const showResources = enrollmentStatus === 'approved' && courseId === resourcesFetchedForCourse;
 
   return (
     <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
@@ -259,8 +280,8 @@ export default function CourseDetail() {
             Course Materials
           </h2>
 
-          {/* Resource Filter */}
-          {enrollmentStatus === 'approved' && !isLocalResourcesLoading && localResources.length > 0 && (
+          {/* Resource Filter - Only show when resources are loaded */}
+          {showResources && !isResourcesLoading && localResources.length > 0 && (
             <div className="flex gap-0.5 bg-slate-50 p-0.5 rounded-md border border-slate-200 overflow-x-auto">
               {[
                 { value: 'all', label: 'All' },
@@ -287,63 +308,80 @@ export default function CourseDetail() {
 
         {/* Resources Grid */}
         {enrollmentStatus === 'approved' ? (
-          isLocalResourcesLoading ? (
-            <div className="flex items-center justify-center min-h-[300px]">
-              <Loader />
-            </div>
-          ) : filteredResources.length === 0 ? (
-            <div className="text-center py-6 text-xs text-slate-400">
-              {localResources.length === 0 ? 'No resources available for this course' : 'No resources available for this filter'}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {filteredResources.map((res) => {
-                const resId = res._id || res.id;
-                const Icon = getResourceIcon(res.type);
-                const resourceTypeLabel = getResourceTypeLabel(res.type);
-                
-                return (
-                  <div
-                    key={resId}
-                    className="flex items-center justify-between p-2.5 bg-slate-50 rounded-md border border-slate-200 hover:border-blue-300 hover:bg-white transition-all group"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-7 h-7 bg-white text-blue-600 rounded-md flex items-center justify-center border border-slate-200 shrink-0">
-                        <Icon className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-xs font-medium text-slate-900 truncate group-hover:text-blue-600 transition-colors">
-                          {res.title}
-                        </h4>
-                        <div className="flex items-center gap-1 mt-0.5">
-                          <span className="text-[10px] text-slate-500 uppercase font-mono">
-                            {resourceTypeLabel}
-                          </span>
-                          <span className="text-[10px] text-slate-300">•</span>
-                          <span className="text-[10px] text-slate-400">
-                            {new Date(res.createdAt || Date.now()).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleViewResource(res)}
-                      disabled={isAccessLoading}
-                      className="ml-2 px-2.5 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center gap-0.5 disabled:opacity-50 shrink-0"
-                    >
-                      {isAccessLoading && activeViewerResource?._id === resId ? (
-                        <Loader className="w-3 h-3" />
-                      ) : (
-                        <Eye className="w-3 h-3" />
-                      )}
-                      View
-                    </button>
+          <>
+            {/* Show loading state */}
+            {isResourcesLoading && (
+              <div className="flex items-center justify-center min-h-[300px]">
+                <Loader />
+              </div>
+            )}
+            
+            {/* Show resources when loaded */}
+            {!isResourcesLoading && showResources && (
+              <>
+                {filteredResources.length === 0 ? (
+                  <div className="text-center py-6 text-xs text-slate-400">
+                    {localResources.length === 0 ? 'No resources available for this course' : 'No resources available for this filter'}
                   </div>
-                );
-              })}
-            </div>
-          )
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {filteredResources.map((res) => {
+                      const resId = res._id || res.id;
+                      const Icon = getResourceIcon(res.type);
+                      const resourceTypeLabel = getResourceTypeLabel(res.type);
+                      
+                      return (
+                        <div
+                          key={resId}
+                          className="flex items-center justify-between p-2.5 bg-slate-50 rounded-md border border-slate-200 hover:border-blue-300 hover:bg-white transition-all group"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-7 h-7 bg-white text-blue-600 rounded-md flex items-center justify-center border border-slate-200 shrink-0">
+                              <Icon className="w-3.5 h-3.5" />
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="text-xs font-medium text-slate-900 truncate group-hover:text-blue-600 transition-colors">
+                                {res.title}
+                              </h4>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <span className="text-[10px] text-slate-500 uppercase font-mono">
+                                  {resourceTypeLabel}
+                                </span>
+                                <span className="text-[10px] text-slate-300">•</span>
+                                <span className="text-[10px] text-slate-400">
+                                  {new Date(res.createdAt || Date.now()).toLocaleDateString()}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => handleViewResource(res)}
+                            disabled={isAccessLoading}
+                            className="ml-2 px-2.5 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center gap-0.5 disabled:opacity-50 shrink-0"
+                          >
+                            {isAccessLoading && activeViewerResource?._id === resId ? (
+                              <Loader className="w-3 h-3" />
+                            ) : (
+                              <Eye className="w-3 h-3" />
+                            )}
+                            View
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+            
+            {/* Don't show anything if not loaded and not loading - clean state */}
+            {!isResourcesLoading && !showResources && localResources.length === 0 && (
+              <div className="text-center py-6 text-xs text-slate-400">
+                No resources available
+              </div>
+            )}
+          </>
         ) : (
           /* Locked Resources */
           <div className="text-center py-6 bg-slate-50 rounded-md border border-slate-200">
