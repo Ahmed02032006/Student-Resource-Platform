@@ -23,7 +23,7 @@ export default function ResourceViewer({ isOpen, onClose, resource }) {
     const type = resource.type?.toLowerCase();
     const url = resource.url || '';
     const ext = getFileExtension(url);
-    
+
     if (type === 'pdf' || ext === 'pdf') return 'pdf';
     if (type === 'video' || ['mp4', 'webm', 'ogg'].includes(ext)) return 'video';
     if (type === 'image' || ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext)) return 'image';
@@ -32,18 +32,6 @@ export default function ResourceViewer({ isOpen, onClose, resource }) {
   };
 
   const resourceType = getResourceType();
-
-  const handleDownload = () => {
-    if (resource.url) {
-      window.open(resource.url, '_blank');
-    }
-  };
-
-  const handleOpenInNewTab = () => {
-    if (resource.url) {
-      window.open(resource.url, '_blank');
-    }
-  };
 
   const renderContent = () => {
     switch (resourceType) {
@@ -56,7 +44,7 @@ export default function ResourceViewer({ isOpen, onClose, resource }) {
             onLoad={() => setLoading(false)}
           />
         );
-      
+
       case 'video':
         return (
           <video
@@ -68,7 +56,7 @@ export default function ResourceViewer({ isOpen, onClose, resource }) {
             Your browser does not support the video tag.
           </video>
         );
-      
+
       case 'image':
         return (
           <div className="flex items-center justify-center h-full bg-slate-50">
@@ -80,7 +68,7 @@ export default function ResourceViewer({ isOpen, onClose, resource }) {
             />
           </div>
         );
-      
+
       case 'ppt':
         return (
           <div className="w-full h-full bg-slate-50 p-4">
@@ -95,7 +83,7 @@ export default function ResourceViewer({ isOpen, onClose, resource }) {
                 <p className="text-sm text-slate-500 mb-4 text-center">
                   {resource.title || 'This is a PowerPoint presentation file.'}
                 </p>
-                
+
                 {/* Google Docs Viewer for PPT */}
                 <iframe
                   src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(resource.url)}`}
@@ -103,29 +91,11 @@ export default function ResourceViewer({ isOpen, onClose, resource }) {
                   title="PowerPoint Viewer"
                   onLoad={() => setLoading(false)}
                 />
-                
-                {/* Fallback options */}
-                <div className="mt-4 flex gap-3">
-                  <button
-                    onClick={handleOpenInNewTab}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    Open in New Tab
-                  </button>
-                  <button
-                    onClick={handleDownload}
-                    className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors flex items-center gap-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    Download
-                  </button>
-                </div>
               </div>
             </div>
           </div>
         );
-      
+
       default:
         return (
           <div className="flex flex-col items-center justify-center h-full bg-slate-50">
@@ -133,13 +103,6 @@ export default function ResourceViewer({ isOpen, onClose, resource }) {
             <p className="text-sm text-slate-600 mb-4">
               This file type cannot be previewed directly.
             </p>
-            <button
-              onClick={handleOpenInNewTab}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Open File
-            </button>
           </div>
         );
     }
@@ -148,11 +111,11 @@ export default function ResourceViewer({ isOpen, onClose, resource }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
-      
+
       {/* Modal */}
       <div className="relative bg-white rounded-xl shadow-2xl w-[95%] max-w-5xl h-[90vh] flex flex-col">
         {/* Header */}
@@ -165,24 +128,8 @@ export default function ResourceViewer({ isOpen, onClose, resource }) {
               {resourceType}
             </span>
           </div>
-          
+
           <div className="flex items-center gap-2">
-            {resourceType !== 'video' && resourceType !== 'image' && (
-              <button
-                onClick={handleDownload}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600"
-                title="Download"
-              >
-                <Download className="w-4 h-4" />
-              </button>
-            )}
-            <button
-              onClick={handleOpenInNewTab}
-              className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600"
-              title="Open in new tab"
-            >
-              <ExternalLink className="w-4 h-4" />
-            </button>
             <button
               onClick={onClose}
               className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600"
@@ -192,7 +139,7 @@ export default function ResourceViewer({ isOpen, onClose, resource }) {
             </button>
           </div>
         </div>
-        
+
         {/* Content */}
         <div className="flex-1 overflow-hidden relative">
           {loading && (
