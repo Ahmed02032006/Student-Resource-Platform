@@ -1,112 +1,73 @@
-import React, { useEffect, useState } from 'react';
-import { X, Download, ExternalLink, FileText, Presentation } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { X } from 'lucide-react';
 
 export default function ResourceViewer({ isOpen, onClose, resource }) {
   const [loading, setLoading] = useState(true);
+  const viewerRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
+      // Load PDF.js dynamically
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.async = true;
+      document.body.appendChild(script);
+
+      script.onload = () => {
+        if (viewerRef.current && resource?.url) {
+          renderPDF(resource.url);
+        }
+      };
+
+      return () => {
+        document.body.removeChild(script);
+      };
     }
   }, [isOpen, resource?.url]);
 
-  if (!isOpen || !resource) return null;
+  const renderPDF = async (url) => {
+    try {
+      const pdfjsLib = window.pdfjsLib;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-  const getFileExtension = (url) => {
-    if (!url) return '';
-    const cleanUrl = url.split('?')[0];
-    const parts = cleanUrl.split('.');
-    return parts[parts.length - 1].toLowerCase();
-  };
+      const loadingTask = pdfjsLib.getDocument(url);
+      const pdf = await loadingTask.promise;
+      
+      const container = viewerRef.current;
+      container.innerHTML = '';
 
-  const getResourceType = () => {
-    const type = resource.type?.toLowerCase();
-    const url = resource.url || '';
-    const ext = getFileExtension(url);
+      // Render all pages
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 1.5 });
 
-    if (type === 'pdf' || ext === 'pdf') return 'pdf';
-    if (type === 'video' || ['mp4', 'webm', 'ogg'].includes(ext)) return 'video';
-    if (type === 'image' || ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext)) return 'image';
-    if (type === 'ppt' || type === 'pptx' || ['ppt', 'pptx', 'pps', 'ppsx'].includes(ext)) return 'ppt';
-    return 'other';
-  };
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        canvas.style.width = '100%';
+        canvas.style.height = 'auto';
+        canvas.style.marginBottom = '10px';
+        canvas.style.border = '1px solid #e2e8f0';
+        canvas.style.borderRadius = '4px';
 
-  const resourceType = getResourceType();
+        const renderContext = {
+          canvasContext: context,
+          viewport: viewport,
+        };
 
-  const renderContent = () => {
-    switch (resourceType) {
-      case 'pdf':
-        return (
-          <iframe
-            src={resource.url}
-            className="w-full h-full"
-            title={resource.title || 'PDF Viewer'}
-            onLoad={() => setLoading(false)}
-          />
-        );
-
-      case 'video':
-        return (
-          <video
-            controls
-            className="w-full h-full"
-            src={resource.url}
-            onLoadedData={() => setLoading(false)}
-          >
-            Your browser does not support the video tag.
-          </video>
-        );
-
-      case 'image':
-        return (
-          <div className="flex items-center justify-center h-full bg-slate-50">
-            <img
-              src={resource.url}
-              alt={resource.title || 'Resource Image'}
-              className="max-w-full max-h-full object-contain"
-              onLoad={() => setLoading(false)}
-            />
-          </div>
-        );
-
-      case 'ppt':
-        return (
-          <div className="w-full h-full bg-slate-50 p-4">
-            <div className="bg-white rounded-lg shadow-lg p-8 max-w-4xl mx-auto h-full overflow-auto">
-              <div className="flex items-center justify-center h-full flex-col">
-                <div className="w-16 h-16 bg-orange-50 text-orange-600 rounded-lg flex items-center justify-center mb-4">
-                  <Presentation className="w-8 h-8" />
-                </div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                  PowerPoint Presentation
-                </h3>
-                <p className="text-sm text-slate-500 mb-4 text-center">
-                  {resource.title || 'This is a PowerPoint presentation file.'}
-                </p>
-
-                {/* Google Docs Viewer for PPT */}
-                <iframe
-                  src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(resource.url)}`}
-                  className="w-full flex-1 min-h-[500px] border border-slate-200 rounded-lg"
-                  title="PowerPoint Viewer"
-                  onLoad={() => setLoading(false)}
-                />
-              </div>
-            </div>
-          </div>
-        );
-
-      default:
-        return (
-          <div className="flex flex-col items-center justify-center h-full bg-slate-50">
-            <FileText className="w-16 h-16 text-slate-400 mb-4" />
-            <p className="text-sm text-slate-600 mb-4">
-              This file type cannot be previewed directly.
-            </p>
-          </div>
-        );
+        await page.render(renderContext).promise;
+        container.appendChild(canvas);
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error('Error rendering PDF:', error);
+      setLoading(false);
     }
   };
+
+  if (!isOpen || !resource) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -125,7 +86,7 @@ export default function ResourceViewer({ isOpen, onClose, resource }) {
               {resource.title || 'Resource Viewer'}
             </h3>
             <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-slate-100 text-slate-600 uppercase">
-              {resourceType}
+              PDF
             </span>
           </div>
 
@@ -141,13 +102,22 @@ export default function ResourceViewer({ isOpen, onClose, resource }) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-hidden relative">
+        <div className="flex-1 overflow-y-auto p-4 bg-slate-50 relative">
           {loading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-white">
+            <div className="absolute inset-0 flex items-center justify-center bg-white/80">
               <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
             </div>
           )}
-          {renderContent()}
+          <div ref={viewerRef} className="max-w-4xl mx-auto" />
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-2 border-t border-slate-200 bg-slate-50">
+          <p className="text-[10px] text-slate-500 text-center flex items-center justify-center gap-1">
+            <span className="inline-block w-1 h-1 bg-slate-300 rounded-full"></span>
+            Viewing only - Download disabled
+            <span className="inline-block w-1 h-1 bg-slate-300 rounded-full"></span>
+          </p>
         </div>
       </div>
     </div>
