@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import {
   Send,
   Bot,
@@ -11,10 +11,13 @@ import {
   RotateCcw,
   Sparkles
 } from 'lucide-react';
+import { sendMessageToAI, sendStreamMessageToAI } from '../api/ai.js';
+import toast from 'react-hot-toast';
 
 export default function YourGPTPage() {
   const { user, isAuthenticated } = useSelector((state) => state.auth);
   const messagesEndRef = useRef(null);
+  const dispatch = useDispatch();
 
   const [inputPrompt, setInputPrompt] = useState('');
   const [messages, setMessages] = useState([
@@ -29,7 +32,9 @@ export default function YourGPTPage() {
 
   const promptSuggestions = [
     { label: 'Generate a 7-day study schedule for my midterms', icon: Sparkles },
-    { label: 'What are the best study techniques for exams?', icon: Lightbulb }
+    { label: 'What are the best study techniques for exams?', icon: Lightbulb },
+    { label: 'Explain recursion with a code example', icon: Code },
+    { label: 'How do I improve my GPA this semester?', icon: HelpCircle },
   ];
 
   const scrollToBottom = () => {
@@ -40,14 +45,16 @@ export default function YourGPTPage() {
     scrollToBottom();
   }, [messages, isGenerating]);
 
-  const isDisabled = false;
+  // Check if user is allowed to interact (authenticated and not admin)
+  const canInteract = isAuthenticated && user?.role !== 'admin';
 
-  const handleSendMessage = (textToSend) => {
-    if (isDisabled) return;
+  const handleSendMessage = async (textToSend) => {
+    if (!canInteract) return;
 
     const text = textToSend || inputPrompt;
     if (!text.trim()) return;
 
+    // Add user message
     const userMsg = {
       id: Date.now().toString(),
       sender: 'user',
@@ -59,39 +66,111 @@ export default function YourGPTPage() {
     setInputPrompt('');
     setIsGenerating(true);
 
-    setTimeout(() => {
-      let aiResponseText = `I have analyzed your request regarding: "${text}". Here is a helpful structured summary:\n\n1. **Core Concept**: Break down the topic into digestible milestones.\n2. **Action Item**: Review your course materials in the Courses tab.\n3. **Recommendation**: Practice key exercises and test your understanding with sample questions.`;
-
-      if (text.toLowerCase().includes('recursion')) {
-        aiResponseText = `**Recursion Explanation**:\nRecursion occurs when a function calls itself until it reaches a base condition.\n\n\`\`\`javascript\nfunction factorial(n) {\n  if (n <= 1) return 1; // Base Case\n  return n * factorial(n - 1); // Recursive Step\n}\nconsole.log(factorial(5)); // Output: 120\n\`\`\``;
-      } else if (text.toLowerCase().includes('gpa')) {
-        aiResponseText = `**Target GPA Strategy**:\nTo boost your GPA next semester:\n- Focus on 4-credit core courses first.\n- Maintain grade points above 3.5 in all enrolled subjects.\n- Use our built-in **GPA Calculator** tab to estimate required course grades!`;
-      } else if (text.toLowerCase().includes('study schedule') || text.toLowerCase().includes('7-day')) {
-        aiResponseText = `**7-Day Midterm Study Schedule**:\n\n**Day 1-2**: Review all lecture notes and identify key topics.\n**Day 3-4**: Practice problems and past exam questions.\n**Day 5**: Group study session with classmates.\n**Day 6**: Take a full practice test under timed conditions.\n**Day 7**: Light review of weak areas and get good rest! 📚`;
-      } else if (text.toLowerCase().includes('study techniques')) {
-        aiResponseText = `**Best Study Techniques for Exams**:\n\n1. **Pomodoro Technique**: Study for 25 minutes, take 5-minute breaks.\n2. **Active Recall**: Test yourself instead of just re-reading notes.\n3. **Spaced Repetition**: Review material at increasing intervals.\n4. **Teach Others**: Explain concepts to someone else to solidify understanding.\n5. **Mind Maps**: Create visual connections between topics. 🎯`;
-      }
+    try {
+      // Call the AI API
+      const response = await sendMessageToAI(text.trim(), {
+        temperature: 0.7,
+        max_tokens: 2048,
+      });
 
       const aiMsg = {
         id: (Date.now() + 1).toString(),
         sender: 'ai',
-        text: aiResponseText,
+        text: response || 'Sorry, I could not process your request. Please try again.',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
 
       setMessages(prev => [...prev, aiMsg]);
+    } catch (error) {
+      console.error('AI Error:', error);
+      toast.error(error.message || 'Failed to get response from AI. Please try again.');
+      
+      // Add error message
+      const errorMsg = {
+        id: (Date.now() + 1).toString(),
+        sender: 'ai',
+        text: '⚠️ Sorry, I encountered an error while processing your request. Please try again later.',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
       setIsGenerating(false);
-    }, 1000);
+    }
+  };
+
+  // Streaming version (for longer responses)
+  const handleSendMessageStream = async (textToSend) => {
+    if (!canInteract) return;
+
+    const text = textToSend || inputPrompt;
+    if (!text.trim()) return;
+
+    // Add user message
+    const userMsg = {
+      id: Date.now().toString(),
+      sender: 'user',
+      text: text.trim(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    setMessages(prev => [...prev, userMsg]);
+    setInputPrompt('');
+    setIsGenerating(true);
+
+    // Create a placeholder for AI response
+    const aiMsgId = (Date.now() + 1).toString();
+    setMessages(prev => [
+      ...prev,
+      {
+        id: aiMsgId,
+        sender: 'ai',
+        text: '',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ]);
+
+    try {
+      await sendStreamMessageToAI(
+        text.trim(),
+        (chunk) => {
+          // Update the AI message with streaming content
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === aiMsgId
+                ? { ...msg, text: msg.text + chunk }
+                : msg
+            )
+          );
+        },
+        {
+          temperature: 0.7,
+          max_tokens: 2048,
+        }
+      );
+    } catch (error) {
+      console.error('Stream Error:', error);
+      toast.error(error.message || 'Failed to get response from AI.');
+      
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.id === aiMsgId
+            ? { ...msg, text: '⚠️ Error: Failed to get response. Please try again.' }
+            : msg
+        )
+      );
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleSuggestionClick = (label) => {
-    if (isDisabled) return;
+    if (!canInteract) return;
     handleSendMessage(label);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (isDisabled) return;
+    if (!canInteract) return;
     handleSendMessage();
   };
 
@@ -130,7 +209,9 @@ export default function YourGPTPage() {
                   <span>{msg.sender === 'user' ? user?.name || 'You' : 'Your GPT AI'}</span>
                   <span>{msg.time}</span>
                 </div>
-                <div className="whitespace-pre-wrap font-sans">{msg.text}</div>
+                <div className="whitespace-pre-wrap font-sans">
+                  {msg.text || (msg.sender === 'ai' && isGenerating ? 'Thinking...' : '')}
+                </div>
               </div>
             </div>
           ))}
@@ -149,48 +230,78 @@ export default function YourGPTPage() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Quick Suggestions - DISABLED (Original styling preserved) */}
+        {/* Quick Suggestions */}
         {messages.length <= 1 && (
           <div className="px-6 pb-3">
-            <div className='flex justify-between'>
-              <p className="text-xs font-semibold text-slate-400 mb-2">Try asking about:</p>
-              <p className="text-xs font-semibold text-slate-400 mb-2">⚠️ AI chat is currently disabled</p>
+            <div className='flex justify-between items-center mb-2'>
+              <p className="text-xs font-semibold text-slate-500">Try asking about:</p>
+              {!canInteract && (
+                <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                  ⚠️ Login required
+                </span>
+              )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {promptSuggestions.map((suggestion, idx) => {
                 const Icon = suggestion.icon;
                 return (
-                  <div
+                  <button
                     key={idx}
-                    className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-lg border border-slate-200 text-slate-400 opacity-60 cursor-not-allowed"
+                    type="button"
+                    onClick={() => handleSuggestionClick(suggestion.label)}
+                    disabled={!canInteract}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                      canInteract
+                        ? 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700 cursor-pointer hover:border-blue-200'
+                        : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
+                    }`}
                   >
-                    <Icon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="truncate text-xs font-medium">{suggestion.label}</span>
-                  </div>
+                    <Icon className={`w-3.5 h-3.5 shrink-0 ${
+                      canInteract ? 'text-blue-600' : 'text-slate-400'
+                    }`} />
+                    <span className="truncate">{suggestion.label}</span>
+                  </button>
                 );
               })}
             </div>
+            {!canInteract && (
+              <p className="text-[10px] text-slate-400 text-center mt-2">
+                Please login as a student to use the AI assistant
+              </p>
+            )}
           </div>
         )}
 
-        {/* Input Bar - DISABLED */}
-        <div className="p-4 pt-3 border-t border-slate-100 flex items-center space-x-3">
+        {/* Input Bar */}
+        <form
+          onSubmit={handleSubmit}
+          className="p-4 pt-3 border-t border-slate-100 flex items-center space-x-3"
+        >
           <input
             type="text"
-            placeholder="AI chat is currently disabled"
-            value=""
-            disabled={true}
-            className="flex-1 px-4 py-3 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-400 placeholder-slate-400 cursor-not-allowed"
+            placeholder={canInteract ? "Ask Your GPT any academic question..." : "Please login to use this feature"}
+            value={inputPrompt}
+            onChange={(e) => setInputPrompt(e.target.value)}
+            disabled={!canInteract}
+            className={`flex-1 px-4 py-3 border rounded-xl text-xs placeholder-slate-400 focus:outline-none transition-all ${
+              canInteract
+                ? 'bg-slate-50 border-slate-200 focus:border-blue-500 focus:bg-white text-slate-900'
+                : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+            }`}
           />
           <button
-            type="button"
-            disabled={true}
-            className="px-5 py-3 bg-slate-300 text-slate-500 rounded-xl text-xs font-semibold flex items-center space-x-1.5 cursor-not-allowed"
+            type="submit"
+            disabled={!inputPrompt.trim() || isGenerating || !canInteract}
+            className={`px-5 py-3 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors ${
+              canInteract && inputPrompt.trim() && !isGenerating
+                ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
+                : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+            }`}
           >
             <span>Send</span>
             <Send className="w-3.5 h-3.5" />
           </button>
-        </div>
+        </form>
       </div>
     </div>
   );
