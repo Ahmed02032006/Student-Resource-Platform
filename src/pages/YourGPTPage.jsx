@@ -10,7 +10,9 @@ import {
   Lightbulb,
   RotateCcw,
   Sparkles,
-  Trash2
+  Trash2,
+  X,
+  AlertCircle
 } from 'lucide-react';
 import { sendMessageToAI, sendStreamMessageToAI } from '../api/ai';
 import toast from 'react-hot-toast';
@@ -24,6 +26,8 @@ export default function YourGPTPage() {
   const [inputPrompt, setInputPrompt] = useState('');
   const [messages, setMessages] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [messageToDelete, setMessageToDelete] = useState(null);
 
   const promptSuggestions = [
     { label: 'Generate a 7-day study schedule for my midterms', icon: Sparkles },
@@ -129,27 +133,49 @@ export default function YourGPTPage() {
   };
 
   const handleClearChat = () => {
-    if (messages.length <= 1 && messages[0]?.sender === 'ai' && messages[0]?.text.includes('Hello')) {
-      toast('Chat is already empty');
-      return;
-    }
+    // Clear localStorage
+    localStorage.removeItem(CHAT_STORAGE_KEY);
+    
+    // Reset to welcome message
+    setMessages([
+      {
+        id: '1',
+        sender: 'ai',
+        text: `Hello ${user?.name || 'Student'}! 👋 I am Your GPT, your personal AI academic assistant. Ask me anything about your enrolled courses, lecture notes, code examples, or exam preparations!`,
+        time: 'Just now',
+      },
+    ]);
+    
+    setShowClearModal(false);
+    toast.success('Chat cleared successfully');
+  };
 
-    // Show confirmation dialog
-    if (window.confirm('Are you sure you want to clear all chat history?')) {
-      // Clear localStorage
-      localStorage.removeItem(CHAT_STORAGE_KEY);
+  const handleDeleteMessage = (messageId) => {
+    const messageToDelete = messages.find(m => m.id === messageId);
+    setMessageToDelete(messageToDelete);
+  };
+
+  const confirmDeleteMessage = () => {
+    if (messageToDelete) {
+      // Don't allow deleting the welcome message if it's the only one
+      const filteredMessages = messages.filter(m => m.id !== messageToDelete.id);
       
-      // Reset to welcome message
-      setMessages([
-        {
-          id: '1',
-          sender: 'ai',
-          text: `Hello ${user?.name || 'Student'}! 👋 I am Your GPT, your personal AI academic assistant. Ask me anything about your enrolled courses, lecture notes, code examples, or exam preparations!`,
-          time: 'Just now',
-        },
-      ]);
+      // If no messages left, add a welcome message
+      if (filteredMessages.length === 0) {
+        setMessages([
+          {
+            id: '1',
+            sender: 'ai',
+            text: `Hello ${user?.name || 'Student'}! 👋 I am Your GPT, your personal AI academic assistant. Ask me anything about your enrolled courses, lecture notes, code examples, or exam preparations!`,
+            time: 'Just now',
+          },
+        ]);
+      } else {
+        setMessages(filteredMessages);
+      }
       
-      toast.success('Chat cleared successfully');
+      setMessageToDelete(null);
+      toast.success('Message deleted');
     }
   };
 
@@ -408,14 +434,14 @@ export default function YourGPTPage() {
           <div className="flex items-center gap-2">
             <Bot className="w-5 h-5 text-blue-600" />
             <span className="text-sm font-semibold text-slate-900">Your GPT AI</span>
-            {messages.length > 1 && (
+            {messages.filter(m => m.sender === 'user').length > 0 && (
               <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
                 {messages.filter(m => m.sender === 'user').length} messages
               </span>
             )}
           </div>
           <button
-            onClick={handleClearChat}
+            onClick={() => setShowClearModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors border border-red-200 hover:border-red-300"
             title="Clear chat history"
           >
@@ -429,7 +455,7 @@ export default function YourGPTPage() {
           {messages.map((msg) => (
             <div
               key={msg.id}
-              className={`flex items-start space-x-3 ${msg.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''
+              className={`group relative flex items-start space-x-3 ${msg.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''
                 }`}
             >
               {/* Avatar */}
@@ -446,10 +472,11 @@ export default function YourGPTPage() {
 
               {/* Message Bubble */}
               <div
-                className={`max-w-4xl p-4 rounded-2xl text-xs leading-relaxed ${msg.sender === 'user'
-                  ? 'bg-blue-600 text-white rounded-tr-none'
-                  : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-none'
-                  }`}
+                className={`relative max-w-4xl p-4 rounded-2xl text-xs leading-relaxed ${
+                  msg.sender === 'user'
+                    ? 'bg-blue-600 text-white rounded-tr-none'
+                    : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-none'
+                }`}
               >
                 <div className="font-semibold text-[10px] opacity-75 mb-1 flex items-center justify-between gap-4">
                   <span>{msg.sender === 'user' ? user?.name || 'You' : 'Your GPT AI'}</span>
@@ -464,6 +491,17 @@ export default function YourGPTPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Delete button - visible on hover */}
+                {msg.id !== '1' && (
+                  <button
+                    onClick={() => handleDeleteMessage(msg.id)}
+                    className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-white rounded-full shadow-md border border-slate-200 hover:bg-red-50 hover:border-red-200 text-slate-400 hover:text-red-500"
+                    title="Delete this message"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -483,7 +521,7 @@ export default function YourGPTPage() {
         </div>
 
         {/* Quick Suggestions */}
-        {messages.length <= 1 && (
+        {messages.filter(m => m.sender === 'user').length === 0 && (
           <div className="px-6 pb-3">
             <div className='flex justify-between items-center mb-2'>
               <p className="text-xs font-semibold text-slate-500">Try asking about:</p>
@@ -555,6 +593,86 @@ export default function YourGPTPage() {
           </button>
         </form>
       </div>
+
+      {/* Custom Clear Chat Modal */}
+      {showClearModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-md mx-4 p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Clear Chat History?</h3>
+                <p className="text-sm text-slate-500">This action cannot be undone.</p>
+              </div>
+            </div>
+            
+            <div className="bg-slate-50 rounded-lg p-3 mb-4">
+              <p className="text-xs text-slate-600">
+                You have <span className="font-semibold text-slate-900">{messages.filter(m => m.sender === 'user').length}</span> messages 
+                and <span className="font-semibold text-slate-900">{messages.filter(m => m.sender === 'ai').length}</span> AI responses in this chat.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowClearModal(false)}
+                className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClearChat}
+                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Clear All
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Delete Message Modal */}
+      {messageToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-md mx-4 p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <X className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Delete Message?</h3>
+                <p className="text-sm text-slate-500">This action cannot be undone.</p>
+              </div>
+            </div>
+            
+            <div className="bg-slate-50 rounded-lg p-3 mb-4 max-h-20 overflow-y-auto">
+              <p className="text-xs text-slate-600 line-clamp-3">
+                "{messageToDelete.text?.substring(0, 150)}
+                {messageToDelete.text?.length > 150 ? '...' : ''}"
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setMessageToDelete(null)}
+                className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteMessage}
+                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+              >
+                <X className="w-4 h-4" />
+                Delete Message
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
