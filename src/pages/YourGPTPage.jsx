@@ -25,6 +25,9 @@ export default function YourGPTPage() {
   const [messages, setMessages] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState(null);
+  const [streamingText, setStreamingText] = useState('');
+  const streamIntervalRef = useRef(null);
 
   const promptSuggestions = [
     { label: 'Generate a 7-day study schedule for my midterms', icon: Sparkles },
@@ -37,7 +40,16 @@ export default function YourGPTPage() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isGenerating]);
+  }, [messages, isGenerating, streamingText]);
+
+  // Clean up interval on unmount
+  useEffect(() => {
+    return () => {
+      if (streamIntervalRef.current) {
+        clearInterval(streamIntervalRef.current);
+      }
+    };
+  }, []);
 
   // Load chat from localStorage on mount
   useEffect(() => {
@@ -101,14 +113,57 @@ export default function YourGPTPage() {
         max_tokens: 2048,
       });
 
+      const fullResponse = response || 'Sorry, I could not process your request. Please try again.';
+      const aiMsgId = (Date.now() + 1).toString();
+      
+      // Create a placeholder message
       const aiMsg = {
-        id: (Date.now() + 1).toString(),
+        id: aiMsgId,
         sender: 'ai',
-        text: response || 'Sorry, I could not process your request. Please try again.',
+        text: '',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
-
+      
       setMessages(prev => [...prev, aiMsg]);
+      setStreamingMessageId(aiMsgId);
+      setStreamingText('');
+      
+      // Start character-by-character streaming
+      let currentIndex = 0;
+      let accumulatedText = '';
+      
+      if (streamIntervalRef.current) {
+        clearInterval(streamIntervalRef.current);
+      }
+      
+      streamIntervalRef.current = setInterval(() => {
+        if (currentIndex < fullResponse.length) {
+          // Add 2-3 characters at a time for smoother effect
+          const charsToAdd = Math.min(2 + Math.floor(Math.random() * 2), fullResponse.length - currentIndex);
+          const chunk = fullResponse.substring(currentIndex, currentIndex + charsToAdd);
+          accumulatedText += chunk;
+          currentIndex += charsToAdd;
+          
+          setStreamingText(accumulatedText);
+          
+          // Update the message in real-time
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === aiMsgId 
+                ? { ...msg, text: accumulatedText }
+                : msg
+            )
+          );
+        } else {
+          // Streaming complete
+          clearInterval(streamIntervalRef.current);
+          streamIntervalRef.current = null;
+          setIsGenerating(false);
+          setStreamingMessageId(null);
+          setStreamingText('');
+        }
+      }, 30); // Update every 30ms for smooth character-by-character effect
+      
     } catch (error) {
       console.error('AI Error:', error);
       toast.error(error.message || 'Failed to get response from AI. Please try again.');
@@ -120,7 +175,6 @@ export default function YourGPTPage() {
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages(prev => [...prev, errorMsg]);
-    } finally {
       setIsGenerating(false);
     }
   };
@@ -528,46 +582,66 @@ export default function YourGPTPage() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto space-y-4 p-6">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex items-start space-x-3 ${msg.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}
-            >
+          {messages.map((msg) => {
+            // Check if this message is currently streaming
+            const isStreaming = msg.id === streamingMessageId && isGenerating;
+            
+            return (
               <div
-                className={`w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 ${msg.sender === 'user' ? 'bg-blue-600' : 'bg-blue-600'}`}
+                key={msg.id}
+                className={`flex items-start space-x-3 ${msg.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}
               >
-                {msg.sender === 'user' ? (
-                  user?.name ? user.name.charAt(0).toUpperCase() : 'U'
-                ) : (
-                  <Bot className="w-5 h-5 text-white" />
-                )}
-              </div>
-
-              <div
-                className={`max-w-4xl p-4 rounded-2xl text-xs leading-relaxed ${
-                  msg.sender === 'user'
-                    ? 'bg-blue-600 text-white rounded-tr-none'
-                    : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-none'
-                }`}
-              >
-                <div className="font-semibold text-[10px] opacity-75 mb-1 flex items-center justify-between gap-4">
-                  <span>{msg.sender === 'user' ? user?.name || 'You' : 'Your GPT AI'}</span>
-                  <span>{msg.time}</span>
-                </div>
-                <div className="whitespace-pre-wrap font-sans">
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 ${msg.sender === 'user' ? 'bg-blue-600' : 'bg-blue-600'}`}
+                >
                   {msg.sender === 'user' ? (
-                    <div className="whitespace-pre-wrap">{msg.text}</div>
+                    user?.name ? user.name.charAt(0).toUpperCase() : 'U'
                   ) : (
-                    <div className="whitespace-pre-wrap">
-                      {formatAIText(msg.text) || (msg.sender === 'ai' && isGenerating ? 'Thinking...' : '')}
-                    </div>
+                    <Bot className="w-5 h-5 text-white" />
                   )}
                 </div>
-              </div>
-            </div>
-          ))}
 
-          {isGenerating && (
+                <div
+                  className={`max-w-4xl p-4 rounded-2xl text-xs leading-relaxed ${
+                    msg.sender === 'user'
+                      ? 'bg-blue-600 text-white rounded-tr-none'
+                      : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-none'
+                  }`}
+                >
+                  <div className="font-semibold text-[10px] opacity-75 mb-1 flex items-center justify-between gap-4">
+                    <span>{msg.sender === 'user' ? user?.name || 'You' : 'Your GPT AI'}</span>
+                    <span>{msg.time}</span>
+                    {isStreaming && (
+                      <span className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></span>
+                        <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse delay-75"></span>
+                        <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse delay-150"></span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="whitespace-pre-wrap font-sans">
+                    {msg.sender === 'user' ? (
+                      <div className="whitespace-pre-wrap">{msg.text}</div>
+                    ) : (
+                      <div className="whitespace-pre-wrap">
+                        {isStreaming ? (
+                          // Show streaming text with a cursor effect
+                          <>
+                            {formatAIText(msg.text)}
+                            <span className="inline-block w-0.5 h-3 bg-blue-500 animate-pulse ml-0.5"></span>
+                          </>
+                        ) : (
+                          formatAIText(msg.text) || (msg.sender === 'ai' && isGenerating ? 'Thinking...' : '')
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {isGenerating && !streamingMessageId && (
             <div className="flex items-start space-x-3">
               <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
                 <Bot className="w-5 h-5 text-white" />
