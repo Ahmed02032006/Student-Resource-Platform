@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector } from 'react-redux';
 import {
   Send,
   Bot,
@@ -11,13 +11,14 @@ import {
   RotateCcw,
   Sparkles
 } from 'lucide-react';
-import { sendMessageToAI, sendStreamMessageToAI } from '../api/ai.js';
+import { sendMessageToAI, sendStreamMessageToAI } from '../api/ai';
 import toast from 'react-hot-toast';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export default function YourGPTPage() {
   const { user, isAuthenticated } = useSelector((state) => state.auth);
   const messagesEndRef = useRef(null);
-  const dispatch = useDispatch();
 
   const [inputPrompt, setInputPrompt] = useState('');
   const [messages, setMessages] = useState([
@@ -85,7 +86,6 @@ export default function YourGPTPage() {
       console.error('AI Error:', error);
       toast.error(error.message || 'Failed to get response from AI. Please try again.');
       
-      // Add error message
       const errorMsg = {
         id: (Date.now() + 1).toString(),
         sender: 'ai',
@@ -174,6 +174,66 @@ export default function YourGPTPage() {
     handleSendMessage();
   };
 
+  // Custom markdown components for better styling
+  const MarkdownComponents = {
+    // Headers
+    h1: ({ children }) => <h1 className="text-lg font-bold text-slate-900 mt-3 mb-2">{children}</h1>,
+    h2: ({ children }) => <h2 className="text-base font-bold text-slate-900 mt-3 mb-2">{children}</h2>,
+    h3: ({ children }) => <h3 className="text-sm font-bold text-slate-800 mt-2 mb-1.5">{children}</h3>,
+    h4: ({ children }) => <h4 className="text-xs font-bold text-slate-800 mt-2 mb-1">{children}</h4>,
+    
+    // Paragraphs
+    p: ({ children }) => <p className="text-xs text-slate-700 mb-1.5 leading-relaxed">{children}</p>,
+    
+    // Lists
+    ul: ({ children }) => <ul className="list-disc pl-4 my-1.5 space-y-0.5">{children}</ul>,
+    ol: ({ children }) => <ol className="list-decimal pl-4 my-1.5 space-y-0.5">{children}</ol>,
+    li: ({ children }) => <li className="text-xs text-slate-700 leading-relaxed">{children}</li>,
+    
+    // Code blocks
+    code: ({ children, className }) => {
+      const isInline = !className;
+      if (isInline) {
+        return <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono text-blue-600">{children}</code>;
+      }
+      return (
+        <pre className="bg-slate-900 text-slate-100 p-3 rounded-lg my-2 overflow-x-auto">
+          <code className="text-xs font-mono">{children}</code>
+        </pre>
+      );
+    },
+    
+    // Blockquotes
+    blockquote: ({ children }) => (
+      <blockquote className="border-l-4 border-blue-400 pl-3 my-2 py-1 bg-blue-50 rounded-r-lg">
+        {children}
+      </blockquote>
+    ),
+    
+    // Tables
+    table: ({ children }) => (
+      <div className="overflow-x-auto my-2">
+        <table className="min-w-full divide-y divide-slate-200 border border-slate-200 rounded-lg text-xs">
+          {children}
+        </table>
+      </div>
+    ),
+    thead: ({ children }) => <thead className="bg-slate-50">{children}</thead>,
+    tbody: ({ children }) => <tbody className="divide-y divide-slate-100">{children}</tbody>,
+    tr: ({ children }) => <tr>{children}</tr>,
+    th: ({ children }) => <th className="px-3 py-2 text-left text-xs font-semibold text-slate-700 border-r border-slate-200">{children}</th>,
+    td: ({ children }) => <td className="px-3 py-2 text-xs text-slate-600 border-r border-slate-200">{children}</td>,
+    
+    // Horizontal rule
+    hr: () => <hr className="my-3 border-t border-slate-200" />,
+    
+    // Strong/Bold
+    strong: ({ children }) => <strong className="font-bold text-slate-900">{children}</strong>,
+    
+    // Emphasis
+    em: ({ children }) => <em className="italic text-slate-700">{children}</em>,
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Main Chat Container */}
@@ -210,7 +270,16 @@ export default function YourGPTPage() {
                   <span>{msg.time}</span>
                 </div>
                 <div className="whitespace-pre-wrap font-sans">
-                  {msg.text || (msg.sender === 'ai' && isGenerating ? 'Thinking...' : '')}
+                  {msg.sender === 'user' ? (
+                    <div className="whitespace-pre-wrap">{msg.text}</div>
+                  ) : (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={MarkdownComponents}
+                    >
+                      {msg.text || (msg.sender === 'ai' && isGenerating ? 'Thinking...' : '')}
+                    </ReactMarkdown>
+                  )}
                 </div>
               </div>
             </div>
