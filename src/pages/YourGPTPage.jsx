@@ -10,7 +10,6 @@ import {
   Lightbulb,
   Sparkles,
   Trash2,
-  X,
   AlertCircle
 } from 'lucide-react';
 import { sendMessageToAI } from '../api/ai';
@@ -26,7 +25,6 @@ export default function YourGPTPage() {
   const [messages, setMessages] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
-  const [messageToDelete, setMessageToDelete] = useState(null);
 
   const promptSuggestions = [
     { label: 'Generate a 7-day study schedule for my midterms', icon: Sparkles },
@@ -143,33 +141,6 @@ export default function YourGPTPage() {
     toast.success('Chat cleared successfully');
   };
 
-  const handleDeleteMessage = (messageId) => {
-    const messageToDelete = messages.find(m => m.id === messageId);
-    setMessageToDelete(messageToDelete);
-  };
-
-  const confirmDeleteMessage = () => {
-    if (messageToDelete) {
-      const filteredMessages = messages.filter(m => m.id !== messageToDelete.id);
-      
-      if (filteredMessages.length === 0) {
-        setMessages([
-          {
-            id: '1',
-            sender: 'ai',
-            text: `Hello ${user?.name || 'Student'}! 👋 I am Your GPT, your personal AI academic assistant. Ask me anything about your enrolled courses, lecture notes, code examples, or exam preparations!`,
-            time: 'Just now',
-          },
-        ]);
-      } else {
-        setMessages(filteredMessages);
-      }
-      
-      setMessageToDelete(null);
-      toast.success('Message deleted');
-    }
-  };
-
   const handleSuggestionClick = (label) => {
     if (!canInteract) return;
     handleSendMessage(label);
@@ -239,70 +210,74 @@ export default function YourGPTPage() {
   const formatInlineText = (text) => {
     if (!text) return text;
 
-    // Process bold text
-    let parts = [];
+    let result = [];
     let currentText = text;
-    let boldRegex = /\*\*(.*?)\*\*/g;
-    let match;
     let lastIndex = 0;
 
+    // Process bold text (**text**)
+    let boldRegex = /\*\*(.*?)\*\*/g;
+    let match;
     while ((match = boldRegex.exec(currentText)) !== null) {
       if (match.index > lastIndex) {
-        parts.push(currentText.substring(lastIndex, match.index));
+        result.push(currentText.substring(lastIndex, match.index));
       }
-      parts.push(<strong key={`bold-${match.index}`} className="font-bold text-slate-900">{match[1]}</strong>);
+      result.push(<strong key={`bold-${match.index}`} className="font-bold text-slate-900">{match[1]}</strong>);
       lastIndex = match.index + match[0].length;
     }
     if (lastIndex < currentText.length) {
-      parts.push(currentText.substring(lastIndex));
+      result.push(currentText.substring(lastIndex));
     }
 
-    if (parts.length === 0) {
-      // Process italic text
-      let italicParts = [];
-      let italicText = text;
-      let italicRegex = /\*(.*?)\*/g;
-      let italicMatch;
-      let italicLastIndex = 0;
+    if (result.length > 0 && result.some(r => typeof r === 'object')) {
+      return result;
+    }
 
-      while ((italicMatch = italicRegex.exec(italicText)) !== null) {
-        if (italicMatch.index > italicLastIndex) {
-          italicParts.push(italicText.substring(italicLastIndex, italicMatch.index));
-        }
-        italicParts.push(<em key={`italic-${italicMatch.index}`} className="italic text-slate-700">{italicMatch[1]}</em>);
-        italicLastIndex = italicMatch.index + italicMatch[0].length;
+    // Process italic text (*text* or _text_)
+    let italicParts = [];
+    let italicText = text;
+    let italicRegex = /\*(.*?)\*|_(.*?)_/g;
+    let italicMatch;
+    let italicLastIndex = 0;
+
+    while ((italicMatch = italicRegex.exec(italicText)) !== null) {
+      if (italicMatch.index > italicLastIndex) {
+        italicParts.push(italicText.substring(italicLastIndex, italicMatch.index));
       }
-      if (italicLastIndex < italicText.length) {
-        italicParts.push(italicText.substring(italicLastIndex));
-      }
+      const content = italicMatch[1] || italicMatch[2] || '';
+      italicParts.push(<em key={`italic-${italicMatch.index}`} className="italic text-slate-700">{content}</em>);
+      italicLastIndex = italicMatch.index + italicMatch[0].length;
+    }
+    if (italicLastIndex < italicText.length) {
+      italicParts.push(italicText.substring(italicLastIndex));
+    }
 
-      if (italicParts.length === 0) {
-        // Process inline code
-        let codeParts = [];
-        let codeText = text;
-        let codeRegex = /`(.*?)`/g;
-        let codeMatch;
-        let codeLastIndex = 0;
-
-        while ((codeMatch = codeRegex.exec(codeText)) !== null) {
-          if (codeMatch.index > codeLastIndex) {
-            codeParts.push(codeText.substring(codeLastIndex, codeMatch.index));
-          }
-          codeParts.push(<code key={`code-${codeMatch.index}`} className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono text-blue-600">{codeMatch[1]}</code>);
-          codeLastIndex = codeMatch.index + codeMatch[0].length;
-        }
-        if (codeLastIndex < codeText.length) {
-          codeParts.push(codeText.substring(codeLastIndex));
-        }
-
-        if (codeParts.length === 0) {
-          return text;
-        }
-        return codeParts;
-      }
+    if (italicParts.length > 0) {
       return italicParts;
     }
-    return parts;
+
+    // Process inline code (`text`)
+    let codeParts = [];
+    let codeText = text;
+    let codeRegex = /`(.*?)`/g;
+    let codeMatch;
+    let codeLastIndex = 0;
+
+    while ((codeMatch = codeRegex.exec(codeText)) !== null) {
+      if (codeMatch.index > codeLastIndex) {
+        codeParts.push(codeText.substring(codeLastIndex, codeMatch.index));
+      }
+      codeParts.push(<code key={`code-${codeMatch.index}`} className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono text-blue-600">{codeMatch[1]}</code>);
+      codeLastIndex = codeMatch.index + codeMatch[0].length;
+    }
+    if (codeLastIndex < codeText.length) {
+      codeParts.push(codeText.substring(codeLastIndex));
+    }
+
+    if (codeParts.length > 0) {
+      return codeParts;
+    }
+
+    return text;
   };
 
   const renderTextLine = (line, index) => {
@@ -373,7 +348,7 @@ export default function YourGPTPage() {
           <div key={`list-${Date.now()}-${Math.random()}`} className={`${listType === 'ol' ? 'list-decimal' : 'list-disc'} pl-${(listIndent + 1) * 4} my-1 space-y-0.5`}>
             {listItems.map((item, idx) => (
               <div key={`list-item-${idx}`} className="text-xs text-slate-700 leading-relaxed flex items-start gap-1.5">
-                <span className="text-slate-400 min-w-[20px]">{listType === 'ol' ? `${idx + 1}.` : '•'}</span>
+                <span className="text-slate-400 min-w-[20px]">{listType === 'ol' ? `${idx + 1}.` : '-'}</span>
                 <span>{item}</span>
               </div>
             ))}
@@ -473,13 +448,11 @@ export default function YourGPTPage() {
         if (info) {
           const indent = Math.floor(info.indent / 2);
           
-          // If we're already in a list and the indent is the same, add to it
           if (inList && indent === listIndent) {
             listItems.push(formatInlineText(info.content));
             continue;
           }
           
-          // If this is a sub-list (deeper indent), flush current and start new
           if (inList && indent > listIndent) {
             flushList();
             inList = true;
@@ -489,7 +462,6 @@ export default function YourGPTPage() {
             continue;
           }
           
-          // New list
           flushList();
           inList = true;
           listType = info.type;
@@ -499,28 +471,24 @@ export default function YourGPTPage() {
         }
       }
 
-      // If line is not a list item, flush any pending list
       if (inList && line.trim() !== '') {
         flushList();
         formattedLines.push(renderTextLine(line, i));
         continue;
       }
 
-      // Empty line - flush list if needed
       if (line.trim() === '') {
         flushList();
         formattedLines.push(<div key={`empty-${i}`} className="h-1.5" />);
         continue;
       }
 
-      // Regular line
       if (line.trim()) {
         flushList();
         formattedLines.push(renderTextLine(line, i));
       }
     }
 
-    // Flush any remaining list
     if (inList) {
       flushList();
     }
@@ -565,7 +533,7 @@ export default function YourGPTPage() {
           {messages.map((msg) => (
             <div
               key={msg.id}
-              className={`group relative flex items-start space-x-3 ${msg.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}
+              className={`flex items-start space-x-3 ${msg.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}
             >
               <div
                 className={`w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 ${msg.sender === 'user' ? 'bg-blue-600' : 'bg-blue-600'}`}
@@ -578,7 +546,7 @@ export default function YourGPTPage() {
               </div>
 
               <div
-                className={`relative max-w-2xl p-4 rounded-2xl text-xs leading-relaxed ${
+                className={`max-w-2xl p-4 rounded-2xl text-xs leading-relaxed ${
                   msg.sender === 'user'
                     ? 'bg-blue-600 text-white rounded-tr-none'
                     : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-none'
@@ -597,15 +565,6 @@ export default function YourGPTPage() {
                     </div>
                   )}
                 </div>
-
-                {msg.id !== '1' && (
-                  <button
-                    onClick={() => handleDeleteMessage(msg.id)}
-                    className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-white rounded-full shadow-md border border-slate-200 hover:bg-red-50 hover:border-red-200 text-slate-400 hover:text-red-500"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
               </div>
             </div>
           ))}
@@ -729,46 +688,6 @@ export default function YourGPTPage() {
               >
                 <Trash2 className="w-4 h-4" />
                 Clear All
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Message Modal */}
-      {messageToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl w-full max-w-md mx-4 p-6 shadow-2xl">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-                <X className="w-6 h-6 text-red-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Delete Message?</h3>
-                <p className="text-sm text-slate-500">This action cannot be undone.</p>
-              </div>
-            </div>
-            
-            <div className="bg-slate-50 rounded-lg p-3 mb-4 max-h-20 overflow-y-auto">
-              <p className="text-xs text-slate-600 line-clamp-3">
-                "{messageToDelete.text?.substring(0, 150)}
-                {messageToDelete.text?.length > 150 ? '...' : ''}"
-              </p>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setMessageToDelete(null)}
-                className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-semibold transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDeleteMessage}
-                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2"
-              >
-                <X className="w-4 h-4" />
-                Delete Message
               </button>
             </div>
           </div>
