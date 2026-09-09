@@ -10,7 +10,9 @@ import {
   Lightbulb,
   Sparkles,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  Copy,
+  Check
 } from 'lucide-react';
 import { sendMessageToAI } from '../api/ai';
 import toast from 'react-hot-toast';
@@ -27,6 +29,7 @@ export default function YourGPTPage() {
   const [showClearModal, setShowClearModal] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState(null);
   const [streamingText, setStreamingText] = useState('');
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
   const streamIntervalRef = useRef(null);
 
   const promptSuggestions = [
@@ -137,13 +140,12 @@ export default function YourGPTPage() {
       }
       
       // Calculate dynamic chunk size based on response length
-      // For shorter responses, use smaller chunks; for longer, use larger chunks
       const getChunkSize = () => {
         const remaining = fullResponse.length - currentIndex;
-        if (remaining > 500) return 5 + Math.floor(Math.random() * 4); // 5-8 chars
-        if (remaining > 200) return 4 + Math.floor(Math.random() * 3); // 4-6 chars
-        if (remaining > 50) return 3 + Math.floor(Math.random() * 2); // 3-4 chars
-        return 2 + Math.floor(Math.random() * 2); // 2-3 chars
+        if (remaining > 500) return 5 + Math.floor(Math.random() * 4);
+        if (remaining > 200) return 4 + Math.floor(Math.random() * 3);
+        if (remaining > 50) return 3 + Math.floor(Math.random() * 2);
+        return 2 + Math.floor(Math.random() * 2);
       };
       
       streamIntervalRef.current = setInterval(() => {
@@ -171,7 +173,7 @@ export default function YourGPTPage() {
           setStreamingMessageId(null);
           setStreamingText('');
         }
-      }, 15); // Changed from 30ms to 15ms for faster streaming
+      }, 15);
       
     } catch (error) {
       console.error('AI Error:', error);
@@ -200,6 +202,26 @@ export default function YourGPTPage() {
     ]);
     setShowClearModal(false);
     toast.success('Chat cleared successfully');
+  };
+
+  const handleCopyMessage = (messageId, text) => {
+    // Remove markdown formatting for cleaner copy
+    const cleanText = text
+      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold
+      .replace(/\*(.*?)\*/g, '$1') // Remove italic
+      .replace(/_/g, '') // Remove underscores
+      .replace(/`(.*?)`/g, '$1') // Remove inline code
+      .replace(/```[a-z]*\n([\s\S]*?)\n```/g, '$1') // Remove code blocks
+      .replace(/\|/g, '') // Remove table separators
+      .replace(/-{3,}/g, ''); // Remove horizontal rules
+    
+    navigator.clipboard.writeText(cleanText).then(() => {
+      setCopiedMessageId(messageId);
+      toast.success('Copied to clipboard!');
+      setTimeout(() => setCopiedMessageId(null), 2000);
+    }).catch(() => {
+      toast.error('Failed to copy');
+    });
   };
 
   const handleSuggestionClick = (label) => {
@@ -594,6 +616,7 @@ export default function YourGPTPage() {
           {messages.map((msg) => {
             // Check if this message is currently streaming
             const isStreaming = msg.id === streamingMessageId && isGenerating;
+            const isCopied = copiedMessageId === msg.id;
             
             return (
               <div
@@ -611,7 +634,7 @@ export default function YourGPTPage() {
                 </div>
 
                 <div
-                  className={`max-w-4xl p-4 rounded-2xl text-xs leading-relaxed ${
+                  className={`relative max-w-4xl p-4 rounded-2xl text-xs leading-relaxed ${
                     msg.sender === 'user'
                       ? 'bg-blue-600 text-white rounded-tr-none'
                       : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-none'
@@ -645,6 +668,21 @@ export default function YourGPTPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Copy Button - Only for AI messages and when not streaming */}
+                  {msg.sender === 'ai' && !isStreaming && msg.id !== '1' && msg.text && (
+                    <button
+                      onClick={() => handleCopyMessage(msg.id, msg.text)}
+                      className="absolute -bottom-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 bg-white rounded-full shadow-md border border-slate-200 hover:bg-blue-50 hover:border-blue-200 text-slate-400 hover:text-blue-600"
+                      title="Copy to clipboard"
+                    >
+                      {isCopied ? (
+                        <Check className="w-3.5 h-3.5 text-green-500" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             );
