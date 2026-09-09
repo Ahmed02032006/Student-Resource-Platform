@@ -59,7 +59,6 @@ export default function YourGPTPage() {
       }
     }
     
-    // Default welcome message if no saved chat
     setMessages([
       {
         id: '1',
@@ -70,7 +69,6 @@ export default function YourGPTPage() {
     ]);
   }, [user?.name]);
 
-  // Save chat to localStorage whenever messages change
   useEffect(() => {
     if (messages.length > 0) {
       try {
@@ -81,7 +79,6 @@ export default function YourGPTPage() {
     }
   }, [messages]);
 
-  // Check if user is allowed to interact (authenticated and not admin)
   const canInteract = isAuthenticated && user?.role !== 'admin';
 
   const handleSendMessage = async (textToSend) => {
@@ -90,7 +87,6 @@ export default function YourGPTPage() {
     const text = textToSend || inputPrompt;
     if (!text.trim()) return;
 
-    // Add user message
     const userMsg = {
       id: Date.now().toString(),
       sender: 'user',
@@ -133,10 +129,7 @@ export default function YourGPTPage() {
   };
 
   const handleClearChat = () => {
-    // Clear localStorage
     localStorage.removeItem(CHAT_STORAGE_KEY);
-    
-    // Reset to welcome message
     setMessages([
       {
         id: '1',
@@ -145,7 +138,6 @@ export default function YourGPTPage() {
         time: 'Just now',
       },
     ]);
-    
     setShowClearModal(false);
     toast.success('Chat cleared successfully');
   };
@@ -157,10 +149,8 @@ export default function YourGPTPage() {
 
   const confirmDeleteMessage = () => {
     if (messageToDelete) {
-      // Don't allow deleting the welcome message if it's the only one
       const filteredMessages = messages.filter(m => m.id !== messageToDelete.id);
       
-      // If no messages left, add a welcome message
       if (filteredMessages.length === 0) {
         setMessages([
           {
@@ -190,7 +180,7 @@ export default function YourGPTPage() {
     handleSendMessage();
   };
 
-  // Custom function to format AI response text
+  // Enhanced formatting function
   const formatAIText = (text) => {
     if (!text) return null;
 
@@ -201,11 +191,34 @@ export default function YourGPTPage() {
     let inCodeBlock = false;
     let codeContent = [];
     let codeLanguage = '';
+    let inList = false;
+    let listType = '';
+    let listItems = [];
+
+    const flushList = () => {
+      if (listItems.length > 0) {
+        formattedLines.push(
+          <div key={`list-${Date.now()}-${Math.random()}`} className={`${listType === 'ol' ? 'list-decimal' : 'list-disc'} pl-4 my-1.5 space-y-0.5`}>
+            {listItems.map((item, idx) => (
+              <div key={`list-item-${idx}`} className="text-xs text-slate-700 leading-relaxed flex items-start gap-1.5">
+                <span className="text-slate-400">{listType === 'ol' ? `${idx + 1}.` : '•'}</span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        );
+        listItems = [];
+        inList = false;
+        listType = '';
+      }
+    };
 
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i];
 
+      // Code block handling
       if (line.trim().startsWith('```') && !inCodeBlock) {
+        flushList();
         inCodeBlock = true;
         codeLanguage = line.trim().replace('```', '').trim();
         codeContent = [];
@@ -230,7 +243,9 @@ export default function YourGPTPage() {
         continue;
       }
 
+      // Table handling
       if (line.includes('|') && !inTable) {
+        flushList();
         inTable = true;
         tableRows = [line];
         continue;
@@ -241,9 +256,23 @@ export default function YourGPTPage() {
           tableRows.push(line);
         } else {
           inTable = false;
-          formattedLines.push(renderTable(tableRows));
+          const tableHtml = renderTable(tableRows);
+          if (tableHtml) {
+            formattedLines.push(tableHtml);
+          }
           tableRows = [];
           if (line.trim()) {
+            // Check if line is a list after table
+            if (line.match(/^(\d+\.\s|[-*]\s)/)) {
+              const listMatch = line.match(/^(\d+\.\s|[-*]\s)/);
+              if (listMatch) {
+                listType = listMatch[0].includes('.') ? 'ol' : 'ul';
+                inList = true;
+                const content = line.replace(/^(\d+\.\s|[-*]\s)/, '');
+                listItems.push(formatInlineText(content));
+                continue;
+              }
+            }
             formattedLines.push(renderTextLine(line, i));
           }
           continue;
@@ -251,15 +280,52 @@ export default function YourGPTPage() {
         continue;
       }
 
+      // List handling
+      if (line.match(/^(\d+\.\s|[-*]\s)/) && !inList) {
+        flushList();
+        const listMatch = line.match(/^(\d+\.\s|[-*]\s)/);
+        if (listMatch) {
+          listType = listMatch[0].includes('.') ? 'ol' : 'ul';
+          inList = true;
+          const content = line.replace(/^(\d+\.\s|[-*]\s)/, '');
+          listItems.push(formatInlineText(content));
+          continue;
+        }
+      }
+
+      if (inList && line.match(/^(\d+\.\s|[-*]\s)/)) {
+        const content = line.replace(/^(\d+\.\s|[-*]\s)/, '');
+        listItems.push(formatInlineText(content));
+        continue;
+      }
+
+      if (inList && line.trim() === '') {
+        flushList();
+        continue;
+      }
+
+      if (inList && !line.match(/^(\d+\.\s|[-*]\s)/) && line.trim() !== '') {
+        flushList();
+        formattedLines.push(renderTextLine(line, i));
+        continue;
+      }
+
+      // Regular line
       if (line.trim()) {
+        flushList();
         formattedLines.push(renderTextLine(line, i));
       } else {
+        flushList();
         formattedLines.push(<div key={`empty-${i}`} className="h-1.5" />);
       }
     }
 
+    flushList();
     if (inTable && tableRows.length > 0) {
-      formattedLines.push(renderTable(tableRows));
+      const tableHtml = renderTable(tableRows);
+      if (tableHtml) {
+        formattedLines.push(tableHtml);
+      }
     }
 
     return formattedLines;
@@ -268,26 +334,37 @@ export default function YourGPTPage() {
   const renderTable = (rows) => {
     if (rows.length === 0) return null;
 
+    // Parse rows
     const parsedRows = rows.map(row => {
       return row.split('|').filter(cell => cell.trim() !== '').map(cell => cell.trim());
     });
 
+    // Find header (skip separator rows)
     const isSeparatorRow = (cells) => {
       return cells.every(cell => /^[-:]+$/.test(cell));
     };
 
-    const headerRow = parsedRows.find(row => !isSeparatorRow(row));
-    const dataRows = parsedRows.filter(row => !isSeparatorRow(row) && row !== headerRow);
+    let headerRow = null;
+    let dataRows = [];
+
+    for (const row of parsedRows) {
+      if (isSeparatorRow(row)) continue;
+      if (!headerRow) {
+        headerRow = row;
+      } else {
+        dataRows.push(row);
+      }
+    }
 
     if (!headerRow) return null;
 
     return (
-      <div key={`table-${Date.now()}`} className="overflow-x-auto my-2">
-        <table className="min-w-full divide-y divide-slate-200 border border-slate-200 rounded-lg text-xs">
+      <div key={`table-${Date.now()}-${Math.random()}`} className="overflow-x-auto my-2">
+        <table className="w-full divide-y divide-slate-200 border border-slate-200 rounded-lg text-xs">
           <thead className="bg-slate-50">
             <tr>
               {headerRow.map((cell, idx) => (
-                <th key={idx} className="px-3 py-2 text-left text-xs font-semibold text-slate-700 border-r border-slate-200 last:border-r-0">
+                <th key={`th-${idx}`} className="px-3 py-2 text-left text-xs font-semibold text-slate-700 border-r border-slate-200 last:border-r-0">
                   {formatInlineText(cell)}
                 </th>
               ))}
@@ -295,9 +372,9 @@ export default function YourGPTPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {dataRows.map((row, rowIdx) => (
-              <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+              <tr key={`tr-${rowIdx}`} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                 {row.map((cell, cellIdx) => (
-                  <td key={cellIdx} className="px-3 py-2 text-xs text-slate-600 border-r border-slate-200 last:border-r-0">
+                  <td key={`td-${rowIdx}-${cellIdx}`} className="px-3 py-2 text-xs text-slate-600 border-r border-slate-200 last:border-r-0">
                     {formatInlineText(cell)}
                   </td>
                 ))}
@@ -312,6 +389,7 @@ export default function YourGPTPage() {
   const formatInlineText = (text) => {
     if (!text) return text;
 
+    // Process bold text
     let parts = [];
     let currentText = text;
     let boldRegex = /\*\*(.*?)\*\*/g;
@@ -330,6 +408,7 @@ export default function YourGPTPage() {
     }
 
     if (parts.length === 0) {
+      // Process italic text
       let italicParts = [];
       let italicText = text;
       let italicRegex = /\*(.*?)\*/g;
@@ -348,6 +427,7 @@ export default function YourGPTPage() {
       }
 
       if (italicParts.length === 0) {
+        // Process inline code
         let codeParts = [];
         let codeText = text;
         let codeRegex = /`(.*?)`/g;
@@ -376,6 +456,7 @@ export default function YourGPTPage() {
   };
 
   const renderTextLine = (line, index) => {
+    // Headers
     if (line.startsWith('### ')) {
       return <h3 key={`h3-${index}`} className="text-sm font-bold text-slate-800 mt-3 mb-1.5">{line.replace('### ', '')}</h3>;
     }
@@ -386,26 +467,19 @@ export default function YourGPTPage() {
       return <h1 key={`h1-${index}`} className="text-lg font-bold text-slate-900 mt-3 mb-2">{line.replace('# ', '')}</h1>;
     }
 
-    if (line.startsWith('- ') || line.startsWith('* ')) {
+    // Checkboxes
+    if (line.includes('[ ]') || line.includes('[x]')) {
+      const isChecked = line.includes('[x]');
+      const content = line.replace(/\[[ x]\]\s*/, '');
       return (
-        <div key={`li-${index}`} className="flex items-start gap-1.5 my-0.5">
-          <span className="text-slate-400 text-xs">•</span>
-          <span className="text-xs text-slate-700">{formatInlineText(line.substring(2))}</span>
-        </div>
-      );
-    }
-    if (/^\d+\.\s/.test(line)) {
-      const match = line.match(/^(\d+)\.\s/);
-      const number = match ? match[1] : '';
-      const content = line.replace(/^\d+\.\s/, '');
-      return (
-        <div key={`li-${index}`} className="flex items-start gap-1.5 my-0.5">
-          <span className="text-slate-400 text-xs font-medium">{number}.</span>
+        <div key={`check-${index}`} className="flex items-start gap-2 my-0.5">
+          <span className="text-sm mt-0.5">{isChecked ? '☑' : '☐'}</span>
           <span className="text-xs text-slate-700">{formatInlineText(content)}</span>
         </div>
       );
     }
 
+    // Blockquotes
     if (line.startsWith('> ')) {
       return (
         <blockquote key={`quote-${index}`} className="border-l-4 border-blue-400 pl-3 my-2 py-1 bg-blue-50 rounded-r-lg">
@@ -414,10 +488,12 @@ export default function YourGPTPage() {
       );
     }
 
+    // Horizontal rules
     if (/^[-*_]{3,}$/.test(line.trim())) {
       return <hr key={`hr-${index}`} className="my-3 border-t border-slate-200" />;
     }
 
+    // Regular paragraph
     return (
       <p key={`p-${index}`} className="text-xs text-slate-700 mb-1.5 leading-relaxed">
         {formatInlineText(line)}
@@ -427,9 +503,8 @@ export default function YourGPTPage() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Main Chat Container */}
       <div className="attmark-card flex-1 flex flex-col min-h-0">
-        {/* Header with Clear Button */}
+        {/* Header */}
         <div className="flex items-center justify-between px-6 py-3 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <Bot className="w-5 h-5 text-blue-600" />
@@ -443,25 +518,21 @@ export default function YourGPTPage() {
           <button
             onClick={() => setShowClearModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors border border-red-200 hover:border-red-300"
-            title="Clear chat history"
           >
             <Trash2 className="w-3.5 h-3.5" />
             Clear Chat
           </button>
         </div>
 
-        {/* Messages Scroll Area */}
+        {/* Messages */}
         <div className="flex-1 overflow-y-auto space-y-4 p-6">
           {messages.map((msg) => (
             <div
               key={msg.id}
-              className={`group relative flex items-start space-x-3 ${msg.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''
-                }`}
+              className={`group relative flex items-start space-x-3 ${msg.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}
             >
-              {/* Avatar */}
               <div
-                className={`w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 ${msg.sender === 'user' ? 'bg-blue-600' : 'bg-blue-600'
-                  }`}
+                className={`w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 ${msg.sender === 'user' ? 'bg-blue-600' : 'bg-blue-600'}`}
               >
                 {msg.sender === 'user' ? (
                   user?.name ? user.name.charAt(0).toUpperCase() : 'U'
@@ -470,9 +541,8 @@ export default function YourGPTPage() {
                 )}
               </div>
 
-              {/* Message Bubble */}
               <div
-                className={`relative max-w-4xl p-4 rounded-2xl text-xs leading-relaxed ${
+                className={`relative max-w-2xl p-4 rounded-2xl text-xs leading-relaxed ${
                   msg.sender === 'user'
                     ? 'bg-blue-600 text-white rounded-tr-none'
                     : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-none'
@@ -492,12 +562,10 @@ export default function YourGPTPage() {
                   )}
                 </div>
 
-                {/* Delete button - visible on hover */}
                 {msg.id !== '1' && (
                   <button
                     onClick={() => handleDeleteMessage(msg.id)}
                     className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-white rounded-full shadow-md border border-slate-200 hover:bg-red-50 hover:border-red-200 text-slate-400 hover:text-red-500"
-                    title="Delete this message"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -523,7 +591,7 @@ export default function YourGPTPage() {
         {/* Quick Suggestions */}
         {messages.filter(m => m.sender === 'user').length === 0 && (
           <div className="px-6 pb-3">
-            <div className='flex justify-between items-center mb-2'>
+            <div className="flex justify-between items-center mb-2">
               <p className="text-xs font-semibold text-slate-500">Try asking about:</p>
               {!canInteract && (
                 <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
@@ -563,10 +631,7 @@ export default function YourGPTPage() {
         )}
 
         {/* Input Bar */}
-        <form
-          onSubmit={handleSubmit}
-          className="p-4 pt-3 border-t border-slate-100 flex items-center space-x-3"
-        >
+        <form onSubmit={handleSubmit} className="p-4 pt-3 border-t border-slate-100 flex items-center space-x-3">
           <input
             type="text"
             placeholder={canInteract ? "Ask Your GPT any academic question..." : "Please login to use this feature"}
@@ -594,7 +659,7 @@ export default function YourGPTPage() {
         </form>
       </div>
 
-      {/* Custom Clear Chat Modal */}
+      {/* Clear Chat Modal */}
       {showClearModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl w-full max-w-md mx-4 p-6 shadow-2xl">
@@ -634,7 +699,7 @@ export default function YourGPTPage() {
         </div>
       )}
 
-      {/* Custom Delete Message Modal */}
+      {/* Delete Message Modal */}
       {messageToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl w-full max-w-md mx-4 p-6 shadow-2xl">
