@@ -29,9 +29,7 @@ export default function YourGPTPage() {
 
   const promptSuggestions = [
     { label: 'Generate a 7-day study schedule for my midterms', icon: Sparkles },
-    { label: 'How do I improve my GPA this semester?', icon: HelpCircle },
-    { label: 'Explain recursion with a code example', icon: Code },
-    { label: 'What are the best study techniques for exams?', icon: Lightbulb },
+    { label: 'What are the best study techniques for exams?', icon: Lightbulb }
   ];
 
   const scrollToBottom = () => {
@@ -42,8 +40,7 @@ export default function YourGPTPage() {
     scrollToBottom();
   }, [messages, isGenerating]);
 
-  // DISABLE EVERYTHING - No one can interact
-  const isDisabled = true;
+  const isDisabled = false;
 
   const handleSendMessage = (textToSend) => {
     if (isDisabled) return;
