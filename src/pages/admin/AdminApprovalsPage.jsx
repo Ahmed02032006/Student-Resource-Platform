@@ -371,6 +371,7 @@ export default function AdminApprovalsPage() {
                     <th className="p-3.5">Semester</th>
                     <th className="p-3.5">Status</th>
                     <th className="p-3.5 text-center">Registered Date</th>
+                    <th className="p-3.5 text-center">Last Login</th> {/* Add this line */}
                     <th className="p-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -400,6 +401,21 @@ export default function AdminApprovalsPage() {
                       </td>
                       <td className="p-3.5 text-center font-mono-code text-[11px] text-slate-400">
                         {new Date(acc.createdAt || Date.now()).toLocaleDateString()}
+                      </td>
+                      {/* Add this td for Last Login */}
+                      <td className="p-3.5 text-center">
+                        {acc.lastLogin ? (
+                          <div>
+                            <div className="font-mono-code text-[11px] text-slate-600">
+                              {new Date(acc.lastLogin).toLocaleDateString()}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono-code mt-0.5">
+                              {new Date(acc.lastLogin).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-[11px]">Never logged in</span>
+                        )}
                       </td>
                       <td className="p-3.5">
                         <div className="flex items-center justify-end gap-2">

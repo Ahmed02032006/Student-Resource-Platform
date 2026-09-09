@@ -79,6 +79,9 @@ export default function Dashboard() {
         return ImageIcon;
       case 'note':
         return File;
+      case 'ppt':
+      case 'pptx':
+        return FileText;
       default:
         return FileText;
     }
@@ -90,6 +93,8 @@ export default function Dashboard() {
       video: 'bg-purple-50 text-purple-700 border-purple-200',
       image: 'bg-emerald-50 text-emerald-700 border-emerald-200',
       note: 'bg-blue-50 text-blue-700 border-blue-200',
+      ppt: 'bg-orange-50 text-orange-700 border-orange-200',
+      pptx: 'bg-orange-50 text-orange-700 border-orange-200',
     };
     return colors[format?.toLowerCase()] || 'bg-slate-50 text-slate-600 border-slate-200';
   };
@@ -327,6 +332,8 @@ export default function Dashboard() {
               <option value="video">Videos</option>
               <option value="image">Images</option>
               <option value="note">Notes</option>
+              <option value="ppt">PPT Presentations</option>
+              <option value="pptx">PPTX Presentations</option>
             </select>
 
             {/* Date Indicator Pill */}
