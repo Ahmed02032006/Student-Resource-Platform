@@ -128,7 +128,7 @@ export default function YourGPTPage() {
       setStreamingMessageId(aiMsgId);
       setStreamingText('');
       
-      // Start character-by-character streaming
+      // Start character-by-character streaming - FASTER SPEED
       let currentIndex = 0;
       let accumulatedText = '';
       
@@ -136,10 +136,19 @@ export default function YourGPTPage() {
         clearInterval(streamIntervalRef.current);
       }
       
+      // Calculate dynamic chunk size based on response length
+      // For shorter responses, use smaller chunks; for longer, use larger chunks
+      const getChunkSize = () => {
+        const remaining = fullResponse.length - currentIndex;
+        if (remaining > 500) return 5 + Math.floor(Math.random() * 4); // 5-8 chars
+        if (remaining > 200) return 4 + Math.floor(Math.random() * 3); // 4-6 chars
+        if (remaining > 50) return 3 + Math.floor(Math.random() * 2); // 3-4 chars
+        return 2 + Math.floor(Math.random() * 2); // 2-3 chars
+      };
+      
       streamIntervalRef.current = setInterval(() => {
         if (currentIndex < fullResponse.length) {
-          // Add 2-3 characters at a time for smoother effect
-          const charsToAdd = Math.min(2 + Math.floor(Math.random() * 2), fullResponse.length - currentIndex);
+          const charsToAdd = getChunkSize();
           const chunk = fullResponse.substring(currentIndex, currentIndex + charsToAdd);
           accumulatedText += chunk;
           currentIndex += charsToAdd;
@@ -162,7 +171,7 @@ export default function YourGPTPage() {
           setStreamingMessageId(null);
           setStreamingText('');
         }
-      }, 30); // Update every 30ms for smooth character-by-character effect
+      }, 15); // Changed from 30ms to 15ms for faster streaming
       
     } catch (error) {
       console.error('AI Error:', error);
