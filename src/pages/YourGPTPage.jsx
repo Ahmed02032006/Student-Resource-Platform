@@ -446,7 +446,7 @@ export default function YourGPTPage() {
 
               {/* Message Bubble */}
               <div
-                className={`max-w-2xl p-4 rounded-2xl text-xs leading-relaxed ${msg.sender === 'user'
+                className={`max-w-4xl p-4 rounded-2xl text-xs leading-relaxed ${msg.sender === 'user'
                   ? 'bg-blue-600 text-white rounded-tr-none'
                   : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-none'
                   }`}
