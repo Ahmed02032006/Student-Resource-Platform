@@ -8,13 +8,12 @@ import {
   Code,
   HelpCircle,
   Lightbulb,
-  RotateCcw,
   Sparkles,
   Trash2,
   X,
   AlertCircle
 } from 'lucide-react';
-import { sendMessageToAI, sendStreamMessageToAI } from '../api/ai';
+import { sendMessageToAI } from '../api/ai';
 import toast from 'react-hot-toast';
 
 const CHAT_STORAGE_KEY = 'your_gpt_chat_history';
@@ -69,6 +68,7 @@ export default function YourGPTPage() {
     ]);
   }, [user?.name]);
 
+  // Save chat to localStorage whenever messages change
   useEffect(() => {
     if (messages.length > 0) {
       try {
@@ -79,6 +79,7 @@ export default function YourGPTPage() {
     }
   }, [messages]);
 
+  // Check if user is allowed to interact
   const canInteract = isAuthenticated && user?.role !== 'admin';
 
   const handleSendMessage = async (textToSend) => {
@@ -180,166 +181,15 @@ export default function YourGPTPage() {
     handleSendMessage();
   };
 
-  // Enhanced formatting function
-  const formatAIText = (text) => {
-    if (!text) return null;
-
-    const lines = text.split('\n');
-    const formattedLines = [];
-    let inTable = false;
-    let tableRows = [];
-    let inCodeBlock = false;
-    let codeContent = [];
-    let codeLanguage = '';
-    let inList = false;
-    let listType = '';
-    let listItems = [];
-
-    const flushList = () => {
-      if (listItems.length > 0) {
-        formattedLines.push(
-          <div key={`list-${Date.now()}-${Math.random()}`} className={`${listType === 'ol' ? 'list-decimal' : 'list-disc'} pl-4 my-1.5 space-y-0.5`}>
-            {listItems.map((item, idx) => (
-              <div key={`list-item-${idx}`} className="text-xs text-slate-700 leading-relaxed flex items-start gap-1.5">
-                <span className="text-slate-400">{listType === 'ol' ? `${idx + 1}.` : '•'}</span>
-                <span>{item}</span>
-              </div>
-            ))}
-          </div>
-        );
-        listItems = [];
-        inList = false;
-        listType = '';
-      }
-    };
-
-    for (let i = 0; i < lines.length; i++) {
-      let line = lines[i];
-
-      // Code block handling
-      if (line.trim().startsWith('```') && !inCodeBlock) {
-        flushList();
-        inCodeBlock = true;
-        codeLanguage = line.trim().replace('```', '').trim();
-        codeContent = [];
-        continue;
-      }
-
-      if (line.trim() === '```' && inCodeBlock) {
-        inCodeBlock = false;
-        formattedLines.push(
-          <div key={`code-${i}`} className="bg-slate-900 rounded-lg p-3 my-2 overflow-x-auto">
-            <div className="text-[10px] text-slate-400 font-mono mb-1">{codeLanguage || 'code'}</div>
-            <pre className="text-xs font-mono text-slate-100 whitespace-pre-wrap">
-              {codeContent.join('\n')}
-            </pre>
-          </div>
-        );
-        continue;
-      }
-
-      if (inCodeBlock) {
-        codeContent.push(line);
-        continue;
-      }
-
-      // Table handling
-      if (line.includes('|') && !inTable) {
-        flushList();
-        inTable = true;
-        tableRows = [line];
-        continue;
-      }
-
-      if (inTable) {
-        if (line.includes('|')) {
-          tableRows.push(line);
-        } else {
-          inTable = false;
-          const tableHtml = renderTable(tableRows);
-          if (tableHtml) {
-            formattedLines.push(tableHtml);
-          }
-          tableRows = [];
-          if (line.trim()) {
-            // Check if line is a list after table
-            if (line.match(/^(\d+\.\s|[-*]\s)/)) {
-              const listMatch = line.match(/^(\d+\.\s|[-*]\s)/);
-              if (listMatch) {
-                listType = listMatch[0].includes('.') ? 'ol' : 'ul';
-                inList = true;
-                const content = line.replace(/^(\d+\.\s|[-*]\s)/, '');
-                listItems.push(formatInlineText(content));
-                continue;
-              }
-            }
-            formattedLines.push(renderTextLine(line, i));
-          }
-          continue;
-        }
-        continue;
-      }
-
-      // List handling
-      if (line.match(/^(\d+\.\s|[-*]\s)/) && !inList) {
-        flushList();
-        const listMatch = line.match(/^(\d+\.\s|[-*]\s)/);
-        if (listMatch) {
-          listType = listMatch[0].includes('.') ? 'ol' : 'ul';
-          inList = true;
-          const content = line.replace(/^(\d+\.\s|[-*]\s)/, '');
-          listItems.push(formatInlineText(content));
-          continue;
-        }
-      }
-
-      if (inList && line.match(/^(\d+\.\s|[-*]\s)/)) {
-        const content = line.replace(/^(\d+\.\s|[-*]\s)/, '');
-        listItems.push(formatInlineText(content));
-        continue;
-      }
-
-      if (inList && line.trim() === '') {
-        flushList();
-        continue;
-      }
-
-      if (inList && !line.match(/^(\d+\.\s|[-*]\s)/) && line.trim() !== '') {
-        flushList();
-        formattedLines.push(renderTextLine(line, i));
-        continue;
-      }
-
-      // Regular line
-      if (line.trim()) {
-        flushList();
-        formattedLines.push(renderTextLine(line, i));
-      } else {
-        flushList();
-        formattedLines.push(<div key={`empty-${i}`} className="h-1.5" />);
-      }
-    }
-
-    flushList();
-    if (inTable && tableRows.length > 0) {
-      const tableHtml = renderTable(tableRows);
-      if (tableHtml) {
-        formattedLines.push(tableHtml);
-      }
-    }
-
-    return formattedLines;
-  };
+  // ==================== FORMATTING FUNCTIONS ====================
 
   const renderTable = (rows) => {
     if (rows.length === 0) return null;
 
-    // Parse rows
     const parsedRows = rows.map(row => {
       return row.split('|').filter(cell => cell.trim() !== '').map(cell => cell.trim());
     });
 
-    // Find header (skip separator rows)
     const isSeparatorRow = (cells) => {
       return cells.every(cell => /^[-:]+$/.test(cell));
     };
@@ -500,6 +350,192 @@ export default function YourGPTPage() {
       </p>
     );
   };
+
+  // Main formatting function with proper list handling
+  const formatAIText = (text) => {
+    if (!text) return null;
+
+    const lines = text.split('\n');
+    const formattedLines = [];
+    let inTable = false;
+    let tableRows = [];
+    let inCodeBlock = false;
+    let codeContent = [];
+    let codeLanguage = '';
+    let inList = false;
+    let listItems = [];
+    let listType = 'ul';
+    let listIndent = 0;
+
+    const flushList = () => {
+      if (listItems.length > 0) {
+        formattedLines.push(
+          <div key={`list-${Date.now()}-${Math.random()}`} className={`${listType === 'ol' ? 'list-decimal' : 'list-disc'} pl-${(listIndent + 1) * 4} my-1 space-y-0.5`}>
+            {listItems.map((item, idx) => (
+              <div key={`list-item-${idx}`} className="text-xs text-slate-700 leading-relaxed flex items-start gap-1.5">
+                <span className="text-slate-400 min-w-[20px]">{listType === 'ol' ? `${idx + 1}.` : '•'}</span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        );
+        listItems = [];
+        inList = false;
+      }
+    };
+
+    const isListItem = (line) => {
+      return /^(\s*)(\d+\.\s|[-*]\s|•\s)/.test(line);
+    };
+
+    const getListItemContent = (line) => {
+      const match = line.match(/^(\s*)(\d+\.\s|[-*]\s|•\s)/);
+      if (!match) return null;
+      const indent = match[1].length;
+      const content = line.replace(/^(\s*)(\d+\.\s|[-*]\s|•\s)/, '');
+      const type = /^\d+\.\s/.test(match[2]) ? 'ol' : 'ul';
+      return { indent, content: content.trim(), type };
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+
+      // Code block handling
+      if (line.trim().startsWith('```') && !inCodeBlock) {
+        flushList();
+        inCodeBlock = true;
+        codeLanguage = line.trim().replace('```', '').trim();
+        codeContent = [];
+        continue;
+      }
+
+      if (line.trim() === '```' && inCodeBlock) {
+        inCodeBlock = false;
+        formattedLines.push(
+          <div key={`code-${i}`} className="bg-slate-900 rounded-lg p-3 my-2 overflow-x-auto">
+            <div className="text-[10px] text-slate-400 font-mono mb-1">{codeLanguage || 'code'}</div>
+            <pre className="text-xs font-mono text-slate-100 whitespace-pre-wrap">
+              {codeContent.join('\n')}
+            </pre>
+          </div>
+        );
+        continue;
+      }
+
+      if (inCodeBlock) {
+        codeContent.push(line);
+        continue;
+      }
+
+      // Table handling
+      if (line.includes('|') && !inTable) {
+        flushList();
+        inTable = true;
+        tableRows = [line];
+        continue;
+      }
+
+      if (inTable) {
+        if (line.includes('|')) {
+          tableRows.push(line);
+        } else {
+          inTable = false;
+          const tableHtml = renderTable(tableRows);
+          if (tableHtml) {
+            formattedLines.push(tableHtml);
+          }
+          tableRows = [];
+          if (line.trim()) {
+            if (isListItem(line)) {
+              const info = getListItemContent(line);
+              if (info) {
+                if (!inList) {
+                  inList = true;
+                  listType = info.type;
+                  listIndent = Math.floor(info.indent / 2);
+                }
+                listItems.push(formatInlineText(info.content));
+                continue;
+              }
+            } else {
+              flushList();
+              formattedLines.push(renderTextLine(line, i));
+            }
+          }
+          continue;
+        }
+        continue;
+      }
+
+      // List handling
+      if (isListItem(line)) {
+        const info = getListItemContent(line);
+        if (info) {
+          const indent = Math.floor(info.indent / 2);
+          
+          // If we're already in a list and the indent is the same, add to it
+          if (inList && indent === listIndent) {
+            listItems.push(formatInlineText(info.content));
+            continue;
+          }
+          
+          // If this is a sub-list (deeper indent), flush current and start new
+          if (inList && indent > listIndent) {
+            flushList();
+            inList = true;
+            listType = info.type;
+            listIndent = indent;
+            listItems.push(formatInlineText(info.content));
+            continue;
+          }
+          
+          // New list
+          flushList();
+          inList = true;
+          listType = info.type;
+          listIndent = indent;
+          listItems.push(formatInlineText(info.content));
+          continue;
+        }
+      }
+
+      // If line is not a list item, flush any pending list
+      if (inList && line.trim() !== '') {
+        flushList();
+        formattedLines.push(renderTextLine(line, i));
+        continue;
+      }
+
+      // Empty line - flush list if needed
+      if (line.trim() === '') {
+        flushList();
+        formattedLines.push(<div key={`empty-${i}`} className="h-1.5" />);
+        continue;
+      }
+
+      // Regular line
+      if (line.trim()) {
+        flushList();
+        formattedLines.push(renderTextLine(line, i));
+      }
+    }
+
+    // Flush any remaining list
+    if (inList) {
+      flushList();
+    }
+
+    if (inTable && tableRows.length > 0) {
+      const tableHtml = renderTable(tableRows);
+      if (tableHtml) {
+        formattedLines.push(tableHtml);
+      }
+    }
+
+    return formattedLines;
+  };
+
+  // ==================== RENDER ====================
 
   return (
     <div className="h-full flex flex-col">
