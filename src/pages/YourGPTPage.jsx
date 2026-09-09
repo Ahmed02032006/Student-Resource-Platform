@@ -131,7 +131,7 @@ export default function YourGPTPage() {
       setStreamingMessageId(aiMsgId);
       setStreamingText('');
       
-      // Start character-by-character streaming - FASTER SPEED
+      // Start character-by-character streaming
       let currentIndex = 0;
       let accumulatedText = '';
       
@@ -139,7 +139,6 @@ export default function YourGPTPage() {
         clearInterval(streamIntervalRef.current);
       }
       
-      // Calculate dynamic chunk size based on response length
       const getChunkSize = () => {
         const remaining = fullResponse.length - currentIndex;
         if (remaining > 500) return 5 + Math.floor(Math.random() * 4);
@@ -157,7 +156,6 @@ export default function YourGPTPage() {
           
           setStreamingText(accumulatedText);
           
-          // Update the message in real-time
           setMessages(prev => 
             prev.map(msg => 
               msg.id === aiMsgId 
@@ -166,7 +164,6 @@ export default function YourGPTPage() {
             )
           );
         } else {
-          // Streaming complete
           clearInterval(streamIntervalRef.current);
           streamIntervalRef.current = null;
           setIsGenerating(false);
@@ -207,13 +204,13 @@ export default function YourGPTPage() {
   const handleCopyMessage = (messageId, text) => {
     // Remove markdown formatting for cleaner copy
     const cleanText = text
-      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold
-      .replace(/\*(.*?)\*/g, '$1') // Remove italic
-      .replace(/_/g, '') // Remove underscores
-      .replace(/`(.*?)`/g, '$1') // Remove inline code
-      .replace(/```[a-z]*\n([\s\S]*?)\n```/g, '$1') // Remove code blocks
-      .replace(/\|/g, '') // Remove table separators
-      .replace(/-{3,}/g, ''); // Remove horizontal rules
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/_/g, '')
+      .replace(/`(.*?)`/g, '$1')
+      .replace(/```[a-z]*\n([\s\S]*?)\n```/g, '$1')
+      .replace(/\|/g, '')
+      .replace(/-{3,}/g, '');
     
     navigator.clipboard.writeText(cleanText).then(() => {
       setCopiedMessageId(messageId);
@@ -614,9 +611,10 @@ export default function YourGPTPage() {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto space-y-4 p-6">
           {messages.map((msg) => {
-            // Check if this message is currently streaming
             const isStreaming = msg.id === streamingMessageId && isGenerating;
             const isCopied = copiedMessageId === msg.id;
+            const isWelcomeMessage = msg.id === '1';
+            const showCopyButton = msg.sender === 'ai' && !isStreaming && !isWelcomeMessage && msg.text;
             
             return (
               <div
@@ -633,47 +631,48 @@ export default function YourGPTPage() {
                   )}
                 </div>
 
-                <div
-                  className={`relative max-w-4xl p-4 rounded-2xl text-xs leading-relaxed ${
-                    msg.sender === 'user'
-                      ? 'bg-blue-600 text-white rounded-tr-none'
-                      : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-none'
-                  }`}
-                >
-                  <div className="font-semibold text-[10px] opacity-75 mb-1 flex items-center justify-between gap-4">
-                    <span>{msg.sender === 'user' ? user?.name || 'You' : 'Your GPT AI'}</span>
-                    <span>{msg.time}</span>
-                    {isStreaming && (
-                      <span className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></span>
-                        <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse delay-75"></span>
-                        <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse delay-150"></span>
-                      </span>
-                    )}
-                  </div>
-                  <div className="whitespace-pre-wrap font-sans">
-                    {msg.sender === 'user' ? (
-                      <div className="whitespace-pre-wrap">{msg.text}</div>
-                    ) : (
-                      <div className="whitespace-pre-wrap">
-                        {isStreaming ? (
-                          // Show streaming text with a cursor effect
-                          <>
-                            {formatAIText(msg.text)}
-                            <span className="inline-block w-0.5 h-3 bg-blue-500 animate-pulse ml-0.5"></span>
-                          </>
-                        ) : (
-                          formatAIText(msg.text) || (msg.sender === 'ai' && isGenerating ? 'Thinking...' : '')
-                        )}
-                      </div>
-                    )}
+                <div className="relative max-w-4xl">
+                  <div
+                    className={`p-4 rounded-2xl text-xs leading-relaxed ${
+                      msg.sender === 'user'
+                        ? 'bg-blue-600 text-white rounded-tr-none'
+                        : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-none'
+                    }`}
+                  >
+                    <div className="font-semibold text-[10px] opacity-75 mb-1 flex items-center justify-between gap-4">
+                      <span>{msg.sender === 'user' ? user?.name || 'You' : 'Your GPT AI'}</span>
+                      <span>{msg.time}</span>
+                      {isStreaming && (
+                        <span className="flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></span>
+                          <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse delay-75"></span>
+                          <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse delay-150"></span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="whitespace-pre-wrap font-sans">
+                      {msg.sender === 'user' ? (
+                        <div className="whitespace-pre-wrap">{msg.text}</div>
+                      ) : (
+                        <div className="whitespace-pre-wrap">
+                          {isStreaming ? (
+                            <>
+                              {formatAIText(msg.text)}
+                              <span className="inline-block w-0.5 h-3 bg-blue-500 animate-pulse ml-0.5"></span>
+                            </>
+                          ) : (
+                            formatAIText(msg.text) || (msg.sender === 'ai' && isGenerating ? 'Thinking...' : '')
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Copy Button - Only for AI messages and when not streaming */}
-                  {msg.sender === 'ai' && !isStreaming && msg.id !== '1' && msg.text && (
+                  {/* Copy Button - Bottom Right */}
+                  {showCopyButton && (
                     <button
                       onClick={() => handleCopyMessage(msg.id, msg.text)}
-                      className="absolute -bottom-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 bg-white rounded-full shadow-md border border-slate-200 hover:bg-blue-50 hover:border-blue-200 text-slate-400 hover:text-blue-600"
+                      className="absolute -bottom-2 -right-2 p-1.5 bg-white rounded-full shadow-md border border-slate-200 hover:bg-blue-50 hover:border-blue-200 text-slate-400 hover:text-blue-600 transition-all z-10"
                       title="Copy to clipboard"
                     >
                       {isCopied ? (
