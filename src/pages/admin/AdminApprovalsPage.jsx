@@ -33,7 +33,8 @@ export default function AdminApprovalsPage() {
     email: '',
     semester: '',
     uniqueUserId: '',
-    accountStatus: 'pending'
+    accountStatus: 'pending',
+    role: 'user'
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -108,7 +109,8 @@ export default function AdminApprovalsPage() {
       email: user.email || '',
       semester: user.semester || '1st Semester',
       uniqueUserId: user.uniqueUserId || '',
-      accountStatus: user.accountStatus || 'pending'
+      accountStatus: user.accountStatus || 'pending',
+      role: user.role || 'user'
     });
     setShowEditModal(true);
   };
@@ -124,7 +126,8 @@ export default function AdminApprovalsPage() {
         email: editForm.email,
         semester: editForm.semester,
         uniqueUserId: editForm.uniqueUserId,
-        accountStatus: editForm.accountStatus
+        accountStatus: editForm.accountStatus,
+        role: editForm.role
       });
 
       toast.success('User details updated successfully');
@@ -368,10 +371,11 @@ export default function AdminApprovalsPage() {
                     <th className="p-3.5">User ID</th>
                     <th className="p-3.5">Student Name</th>
                     <th className="p-3.5">Email</th>
+                    <th className="p-3.5">Role</th>
                     <th className="p-3.5">Semester</th>
                     <th className="p-3.5">Status</th>
                     <th className="p-3.5 text-center">Registered Date</th>
-                    <th className="p-3.5 text-center">Last Login</th> {/* Add this line */}
+                    <th className="p-3.5 text-center">Last Login</th>
                     <th className="p-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -381,6 +385,24 @@ export default function AdminApprovalsPage() {
                       <td className="p-3.5 font-mono-code text-blue-600 font-bold">{acc.uniqueUserId}</td>
                       <td className="p-3.5 font-semibold text-slate-900">{acc.name}</td>
                       <td className="p-3.5 text-slate-500 font-mono-code">{acc.email}</td>
+                      {/* Add this td for Role */}
+                      <td className="p-3.5">
+                        {acc.role === 'admin' && (
+                          <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-50 text-red-700 border border-red-200">
+                            ADMIN
+                          </span>
+                        )}
+                        {acc.role === 'cr' && (
+                          <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                            CR
+                          </span>
+                        )}
+                        {(!acc.role || acc.role === 'user') && (
+                          <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-50 text-slate-700 border border-slate-200">
+                            USER
+                          </span>
+                        )}
+                      </td>
                       <td className="p-3.5 text-slate-600">{acc.semester || '1st Semester'}</td>
                       <td className="p-3.5">
                         {acc.accountStatus === 'approved' && (
@@ -402,7 +424,6 @@ export default function AdminApprovalsPage() {
                       <td className="p-3.5 text-center font-mono-code text-[11px] text-slate-400">
                         {new Date(acc.createdAt || Date.now()).toLocaleDateString()}
                       </td>
-                      {/* Add this td for Last Login */}
                       <td className="p-3.5 text-center">
                         {acc.lastLogin ? (
                           <div>
@@ -720,6 +741,19 @@ export default function AdminApprovalsPage() {
                     <option value="pending">Pending</option>
                     <option value="approved">Approved</option>
                     <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Role</label>
+                  <select
+                    value={editForm.role}
+                    onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-lg text-xs text-slate-900"
+                  >
+                    <option value="user">User</option>
+                    <option value="cr">CR (Class Representative)</option>
+                    <option value="admin">Admin</option>
                   </select>
                 </div>
 
