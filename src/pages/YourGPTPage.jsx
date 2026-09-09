@@ -28,8 +28,6 @@ export default function YourGPTPage() {
 
   const promptSuggestions = [
     { label: 'Generate a 7-day study schedule for my midterms', icon: Sparkles },
-    { label: 'What are the best study techniques for exams?', icon: Lightbulb },
-    { label: 'Explain recursion with a code example', icon: Code },
     { label: 'How do I improve my GPA this semester?', icon: HelpCircle },
   ];
 
@@ -546,7 +544,7 @@ export default function YourGPTPage() {
               </div>
 
               <div
-                className={`max-w-2xl p-4 rounded-2xl text-xs leading-relaxed ${
+                className={`max-w-4xl p-4 rounded-2xl text-xs leading-relaxed ${
                   msg.sender === 'user'
                     ? 'bg-blue-600 text-white rounded-tr-none'
                     : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-none'
